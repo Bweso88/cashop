@@ -1,0 +1,5 @@
+extends:
+  - recommended
+rules:
+  # Seul le serveur local est déclaré tant que les domaines de production ne sont pas fixés.
+  no-server-example.com: off

@@ -1,0 +1,810 @@
+openapi: 3.1.0
+info:
+  title: Cashop API
+  version: 0.1.0
+  summary: API REST de la plateforme de transferts Cashop (mobile et web).
+  license:
+    name: Propriétaire — tous droits réservés
+    identifier: LicenseRef-Proprietary
+  description: |
+    Spécification **v0** (phase 1). Les montants sont des entiers en **unités mineures** ISO 4217
+    (XAF : 0 décimale ; EUR, USD, GBP : 2 décimales).
+
+    - Toutes les opérations financières exigent l'en-tête `Idempotency-Key`.
+    - Chaque réponse renvoie `X-Correlation-Id` (généré s'il n'est pas fourni).
+    - Aucun appel ne parle directement à un provider externe : l'orchestrateur Cashop s'en charge.
+servers:
+  - url: http://localhost:8080/api/v1
+    description: Développement local
+tags:
+  - name: Auth
+    description: "Inscription, connexion, OTP, PIN"
+  - name: Profile
+    description: "Profil utilisateur"
+  - name: Wallet
+    description: "Portefeuilles et mouvements"
+  - name: Transfers
+    description: "Quotes et transferts"
+  - name: Beneficiaries
+    description: "Bénéficiaires enregistrés"
+  - name: KYC
+    description: "Vérification d'identité"
+  - name: Providers
+    description: "Providers disponibles et capacités"
+  - name: Webhooks
+    description: "Notifications entrantes des providers"
+
+security:
+  - bearerAuth: []
+
+paths:
+  /auth/register:
+    post:
+      operationId: register
+      tags: [Auth]
+      summary: Créer un compte (envoie un OTP)
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RegisterRequest' }
+      responses:
+        '202':
+          description: Compte créé, OTP envoyé — vérification requise
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OtpChallenge' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /auth/login:
+    post:
+      operationId: login
+      tags: [Auth]
+      summary: Connexion (renvoie un défi OTP ou MFA)
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [login, password, device]
+              properties:
+                login: { type: string, description: E-mail ou téléphone E.164 }
+                password: { type: string, format: password }
+                device: { $ref: '#/components/schemas/DeviceInfo' }
+      responses:
+        '202':
+          description: Second facteur requis
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OtpChallenge' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /auth/verify-otp:
+    post:
+      operationId: verifyOtp
+      tags: [Auth]
+      summary: Valider un OTP / code TOTP et obtenir un jeton
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [challenge_id, code]
+              properties:
+                challenge_id: { type: string, format: uuid }
+                code: { type: string, pattern: '^[0-9]{6}$' }
+      responses:
+        '200':
+          description: Authentifié
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthToken' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /auth/logout:
+    post:
+      operationId: logout
+      tags: [Auth]
+      summary: Révoquer le jeton courant
+      responses:
+        '204': { description: Déconnecté }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /auth/pin:
+    put:
+      operationId: setPin
+      tags: [Auth]
+      summary: Définir ou changer le PIN de transaction
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [pin]
+              properties:
+                current_pin: { type: string, pattern: '^[0-9]{6}$' }
+                pin: { type: string, pattern: '^[0-9]{6}$' }
+      responses:
+        '204': { description: PIN enregistré }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /profile:
+    get:
+      operationId: getProfile
+      tags: [Profile]
+      summary: Profil de l'utilisateur connecté
+      responses:
+        '200':
+          description: Profil
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Profile' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /wallet:
+    get:
+      operationId: getWallet
+      tags: [Wallet]
+      summary: Portefeuilles et soldes
+      responses:
+        '200':
+          description: Portefeuilles
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total_balance: { $ref: '#/components/schemas/Money' }
+                  wallets:
+                    type: array
+                    items: { $ref: '#/components/schemas/Wallet' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /wallet/transactions:
+    get:
+      operationId: listWalletTransactions
+      tags: [Wallet]
+      summary: Historique des mouvements
+      parameters:
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/PerPage' }
+        - name: currency
+          in: query
+          schema: { $ref: '#/components/schemas/CurrencyCode' }
+        - name: type
+          in: query
+          schema: { $ref: '#/components/schemas/WalletTransactionType' }
+      responses:
+        '200':
+          description: Page de mouvements
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/WalletTransaction' }
+                  meta: { $ref: '#/components/schemas/CursorMeta' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /transfers/quote:
+    post:
+      operationId: quoteTransfer
+      tags: [Transfers]
+      summary: Comparer les offres des providers disponibles
+      description: |
+        L'orchestrateur interroge les providers capables de servir le corridor, applique frais et taux
+        Cashop, vérifie les limites et renvoie des quotes à durée de validité limitée.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/QuoteRequest' }
+      responses:
+        '200':
+          description: Quotes disponibles (triées)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  quotes:
+                    type: array
+                    items: { $ref: '#/components/schemas/Quote' }
+                  unavailable_providers:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        provider: { type: string }
+                        reason: { type: string }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /transfers:
+    post:
+      operationId: createTransfer
+      tags: [Transfers]
+      summary: Créer et exécuter un transfert à partir d'une quote
+      parameters:
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateTransferRequest' }
+      responses:
+        '201':
+          description: Transfert créé (statut initial, suivi asynchrone)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Transfer' }
+        '200':
+          description: Rejeu idempotent — réponse d'origine renvoyée à l'identique
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Transfer' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /transfers/{id}:
+    get:
+      operationId: getTransfer
+      tags: [Transfers]
+      summary: Détail d'un transfert (avec timeline)
+      parameters:
+        - { $ref: '#/components/parameters/TransferId' }
+      responses:
+        '200':
+          description: Transfert
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Transfer' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /transfers/{id}/cancel:
+    post:
+      operationId: cancelTransfer
+      tags: [Transfers]
+      summary: Demander l'annulation (si le provider et le statut le permettent)
+      parameters:
+        - { $ref: '#/components/parameters/TransferId' }
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      responses:
+        '202':
+          description: Annulation demandée
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Transfer' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /transfers/{id}/refund:
+    post:
+      operationId: refundTransfer
+      tags: [Transfers]
+      summary: Demander un remboursement (soumis à validation)
+      parameters:
+        - { $ref: '#/components/parameters/TransferId' }
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason: { type: string, maxLength: 500 }
+                amount: { type: integer, minimum: 1, description: Remboursement partiel (unités mineures) }
+      responses:
+        '202':
+          description: Demande de remboursement enregistrée
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Refund' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /beneficiaries:
+    get:
+      operationId: listBeneficiaries
+      tags: [Beneficiaries]
+      summary: Liste des bénéficiaires
+      responses:
+        '200':
+          description: Bénéficiaires
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/Beneficiary' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    post:
+      operationId: createBeneficiary
+      tags: [Beneficiaries]
+      summary: Ajouter un bénéficiaire
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BeneficiaryInput' }
+      responses:
+        '201':
+          description: Créé
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Beneficiary' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /kyc:
+    get:
+      operationId: getKyc
+      tags: [KYC]
+      summary: Statut KYC et prochaines étapes
+      responses:
+        '200':
+          description: Profil KYC
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/KycProfile' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /kyc/documents:
+    post:
+      operationId: uploadKycDocument
+      tags: [KYC]
+      summary: Envoyer un document KYC
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [type, file]
+              properties:
+                type: { type: string, enum: [NATIONAL_ID, PASSPORT, DRIVER_LICENSE, PROOF_OF_ADDRESS, SELFIE] }
+                side: { type: string, enum: [FRONT, BACK] }
+                file: { type: string, format: binary }
+      responses:
+        '201': { description: Document reçu }
+        '413': { description: Fichier trop volumineux }
+
+  /providers:
+    get:
+      operationId: listProviders
+      tags: [Providers]
+      summary: Providers actifs (informations publiques uniquement)
+      responses:
+        '200':
+          description: Providers
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/ProviderSummary' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /providers/{provider}/capabilities:
+    get:
+      operationId: getProviderCapabilities
+      tags: [Providers]
+      summary: Capacités d'un provider (pays, devises, méthodes, opérations)
+      parameters:
+        - name: provider
+          in: path
+          required: true
+          schema: { $ref: '#/components/schemas/ProviderCode' }
+      responses:
+        '200':
+          description: Capacités
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProviderCapabilities' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /webhooks/{provider}:
+    post:
+      operationId: receiveWebhook
+      tags: [Webhooks]
+      summary: Réception des notifications providers
+      description: |
+        Authentifié par le mécanisme du provider (signature, jeton, liste d'IP) — voir SECURITY.md §6.
+        Le payload est stocké, la réponse est immédiate, le traitement est asynchrone et idempotent.
+        Le format du corps dépend du provider : **NOT CONFIRMED** pour les providers réels.
+      security: []
+      parameters:
+        - name: provider
+          in: path
+          required: true
+          schema: { $ref: '#/components/schemas/ProviderCode' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200':
+          description: Reçu (y compris doublon déjà traité)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  event_id: { type: string, format: uuid }
+        '401': { description: Signature ou jeton invalide }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: Jeton Sanctum (mobile). Le web utilise des cookies de session + CSRF.
+
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: Identifiant unique de l'intention (UUID recommandé), 8 à 100 caractères.
+      schema: { type: string, minLength: 8, maxLength: 100 }
+    TransferId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    Cursor:
+      name: cursor
+      in: query
+      schema: { type: string }
+    PerPage:
+      name: per_page
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+
+  responses:
+    ValidationError:
+      description: Données invalides
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Unauthorized:
+      description: Non authentifié
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Forbidden:
+      description: Interdit (KYC insuffisant, risque, permission)
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    NotFound:
+      description: Introuvable
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Conflict:
+      description: Conflit (clé d'idempotence, statut incompatible, quote expirée)
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    TooManyRequests:
+      description: Trop de requêtes
+      headers:
+        Retry-After: { schema: { type: integer } }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+
+  schemas:
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          examples: [VALIDATION_ERROR, KYC_REQUIRED, RISK_REVIEW, LIMIT_EXCEEDED, INSUFFICIENT_FUNDS, QUOTE_EXPIRED, IDEMPOTENCY_CONFLICT, REQUEST_IN_PROGRESS, PROVIDER_UNAVAILABLE]
+        message: { type: string }
+        errors:
+          type: object
+          additionalProperties:
+            type: array
+            items: { type: string }
+        correlation_id: { type: string }
+
+    CurrencyCode:
+      type: string
+      enum: [XAF, EUR, USD, GBP]
+    CountryCode:
+      type: string
+      pattern: '^[A-Z]{2}$'
+    ProviderCode:
+      type: string
+      enum: [visa_direct, moneygram, western_union, mtn_momo, airtel_money]
+    PaymentMethod:
+      type: string
+      enum: [wallet, card, mobile_money, bank_account]
+    PayoutMethod:
+      type: string
+      enum: [card, mobile_money, bank_account, cash_pickup]
+    Money:
+      type: object
+      required: [amount, currency]
+      properties:
+        amount: { type: integer, description: Unités mineures }
+        currency: { $ref: '#/components/schemas/CurrencyCode' }
+
+    DeviceInfo:
+      type: object
+      required: [device_id, platform]
+      properties:
+        device_id: { type: string }
+        platform: { type: string, enum: [ios, android, web] }
+        name: { type: string }
+    RegisterRequest:
+      type: object
+      required: [email, phone, password, country, device]
+      properties:
+        email: { type: string, format: email }
+        phone: { type: string, pattern: '^\+[1-9][0-9]{7,14}$' }
+        password: { type: string, format: password, minLength: 10 }
+        first_name: { type: string }
+        last_name: { type: string }
+        country: { $ref: '#/components/schemas/CountryCode' }
+        device: { $ref: '#/components/schemas/DeviceInfo' }
+    OtpChallenge:
+      type: object
+      properties:
+        challenge_id: { type: string, format: uuid }
+        channel: { type: string, enum: [sms, email, totp] }
+        destination_hint: { type: string, examples: ['+237 6•• ••• •42'] }
+        expires_at: { type: string, format: date-time }
+    AuthToken:
+      type: object
+      properties:
+        token: { type: string }
+        token_type: { type: string, const: Bearer }
+        expires_at: { type: string, format: date-time }
+        user: { $ref: '#/components/schemas/Profile' }
+
+    Profile:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        email: { type: string }
+        phone: { type: string }
+        first_name: { type: string }
+        last_name: { type: string }
+        country: { $ref: '#/components/schemas/CountryCode' }
+        kyc_level: { type: string, examples: [LEVEL_1] }
+        kyc_status: { $ref: '#/components/schemas/KycStatus' }
+        mfa_enabled: { type: boolean }
+        pin_set: { type: boolean }
+
+    Wallet:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        type: { type: string, enum: [PERSONAL, SHARED, SAVINGS] }
+        label: { type: string }
+        status: { type: string, enum: [ACTIVE, FROZEN, CLOSED] }
+        balances:
+          type: array
+          items:
+            type: object
+            properties:
+              currency: { $ref: '#/components/schemas/CurrencyCode' }
+              available: { type: integer }
+              reserved: { type: integer }
+    WalletTransactionType:
+      type: string
+      enum: [DEPOSIT, WITHDRAWAL, TRANSFER_OUT, TRANSFER_IN, FEE, REFUND, REVERSAL]
+    WalletTransaction:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        type: { $ref: '#/components/schemas/WalletTransactionType' }
+        amount: { type: integer, description: 'Signé, en unités mineures' }
+        currency: { $ref: '#/components/schemas/CurrencyCode' }
+        description: { type: string }
+        transfer_id: { type: [string, 'null'], format: uuid }
+        created_at: { type: string, format: date-time }
+    CursorMeta:
+      type: object
+      properties:
+        next_cursor: { type: [string, 'null'] }
+        per_page: { type: integer }
+
+    QuoteRequest:
+      type: object
+      required: [send_amount, send_currency, destination_country, payout_method]
+      properties:
+        send_amount: { type: integer, minimum: 1 }
+        send_currency: { $ref: '#/components/schemas/CurrencyCode' }
+        receive_currency: { $ref: '#/components/schemas/CurrencyCode' }
+        destination_country: { $ref: '#/components/schemas/CountryCode' }
+        payment_method: { $ref: '#/components/schemas/PaymentMethod' }
+        payout_method: { $ref: '#/components/schemas/PayoutMethod' }
+        beneficiary_id: { type: string, format: uuid }
+        provider: { $ref: '#/components/schemas/ProviderCode' }
+    FeeLine:
+      type: object
+      properties:
+        component: { type: string, enum: [FIXED, PERCENTAGE, PROVIDER, FX, COUNTRY, PAYMENT_METHOD, PAYOUT_METHOD] }
+        amount: { type: integer }
+        currency: { $ref: '#/components/schemas/CurrencyCode' }
+    Quote:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        provider: { $ref: '#/components/schemas/ProviderCode' }
+        send: { $ref: '#/components/schemas/Money' }
+        receive: { $ref: '#/components/schemas/Money' }
+        fx_rate: { type: string, description: Décimal en chaîne pour éviter les erreurs d'arrondi, examples: ['655.957000000000'] }
+        fees:
+          type: array
+          items: { $ref: '#/components/schemas/FeeLine' }
+        total_fees: { $ref: '#/components/schemas/Money' }
+        total_debit: { $ref: '#/components/schemas/Money' }
+        payout_method: { $ref: '#/components/schemas/PayoutMethod' }
+        estimated_delivery: { type: [string, 'null'], description: NOT CONFIRMED tant que le provider ne le fournit pas }
+        expires_at: { type: string, format: date-time }
+
+    TransferAuthorization:
+      type: object
+      description: Preuve d'authentification forte, à usage unique.
+      oneOf:
+        - required: [method, pin]
+          properties:
+            method: { const: pin }
+            pin: { type: string, pattern: '^[0-9]{6}$' }
+        - required: [method, device_id, challenge_id, signature]
+          properties:
+            method: { const: biometric }
+            device_id: { type: string }
+            challenge_id: { type: string, format: uuid }
+            signature: { type: string, description: Signature base64 du challenge par la clé de l'appareil }
+    CreateTransferRequest:
+      type: object
+      required: [quote_id, beneficiary_id, authorization]
+      properties:
+        quote_id: { type: string, format: uuid }
+        wallet_id: { type: string, format: uuid }
+        beneficiary_id: { type: string, format: uuid }
+        purpose: { type: string, examples: [FAMILY_SUPPORT] }
+        note: { type: string, maxLength: 140 }
+        authorization: { $ref: '#/components/schemas/TransferAuthorization' }
+        otp_code: { type: string, description: Requis si le moteur de risque exige un step-up }
+
+    TransferStatus:
+      type: string
+      enum: [QUOTED, AWAITING_CONFIRMATION, AUTHORIZED, FUNDS_RESERVED, SUBMITTED, PENDING, PROCESSING,
+             COMPLETED, FAILED, REVERSED, UNKNOWN, CANCEL_REQUESTED, CANCELLED, REFUND_PENDING, REFUNDED,
+             EXPIRED, REJECTED_KYC, REJECTED_RISK]
+    TransferEvent:
+      type: object
+      properties:
+        from_status: { $ref: '#/components/schemas/TransferStatus' }
+        to_status: { $ref: '#/components/schemas/TransferStatus' }
+        source: { type: string, enum: [API, WEBHOOK, POLLING, ADMIN, SYSTEM] }
+        created_at: { type: string, format: date-time }
+    Transfer:
+      type: object
+      properties:
+        id: { type: string, format: uuid, description: transaction_id }
+        status: { $ref: '#/components/schemas/TransferStatus' }
+        provider: { $ref: '#/components/schemas/ProviderCode' }
+        send: { $ref: '#/components/schemas/Money' }
+        receive: { $ref: '#/components/schemas/Money' }
+        fx_rate: { type: string }
+        total_fees: { $ref: '#/components/schemas/Money' }
+        total_debit: { $ref: '#/components/schemas/Money' }
+        payout_method: { $ref: '#/components/schemas/PayoutMethod' }
+        beneficiary: { $ref: '#/components/schemas/Beneficiary' }
+        correlation_id: { type: string }
+        external_reference: { type: string }
+        provider_reference: { type: [string, 'null'] }
+        pickup_code: { type: [string, 'null'], description: Code de retrait (cash pickup) }
+        failure: 
+          type: [object, 'null']
+          properties:
+            code: { type: string }
+            message: { type: string }
+        timeline:
+          type: array
+          items: { $ref: '#/components/schemas/TransferEvent' }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    Refund:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        transfer_id: { type: string, format: uuid }
+        amount: { $ref: '#/components/schemas/Money' }
+        status: { type: string, enum: [REQUESTED, APPROVED, PROCESSING, COMPLETED, FAILED, REJECTED] }
+        created_at: { type: string, format: date-time }
+
+    BeneficiaryInput:
+      type: object
+      required: [name, country, payout_method, details]
+      properties:
+        name: { type: string }
+        nickname: { type: string }
+        country: { $ref: '#/components/schemas/CountryCode' }
+        payout_method: { $ref: '#/components/schemas/PayoutMethod' }
+        details:
+          type: object
+          description: Selon le mode de réception (MSISDN, jeton de carte, IBAN, ville de retrait…). Jamais de PAN en clair stocké.
+          additionalProperties: true
+    Beneficiary:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        nickname: { type: string }
+        country: { $ref: '#/components/schemas/CountryCode' }
+        payout_method: { $ref: '#/components/schemas/PayoutMethod' }
+        masked_details: { type: string, examples: ['+237 6•• ••• 842', '•••• 4242'] }
+
+    KycStatus:
+      type: string
+      enum: [PENDING, IN_REVIEW, VERIFIED, REJECTED, EXPIRED]
+    KycProfile:
+      type: object
+      properties:
+        level: { type: string }
+        status: { $ref: '#/components/schemas/KycStatus' }
+        next_level: { type: [string, 'null'] }
+        missing_requirements:
+          type: array
+          items: { type: string }
+        limits:
+          type: array
+          description: Plafonds configurés (aucune valeur réglementaire par défaut)
+          items:
+            type: object
+            properties:
+              scope: { type: string, enum: [PER_TRANSACTION, DAILY, MONTHLY] }
+              max: { $ref: '#/components/schemas/Money' }
+              used: { $ref: '#/components/schemas/Money' }
+
+    ProviderSummary:
+      type: object
+      properties:
+        code: { $ref: '#/components/schemas/ProviderCode' }
+        name: { type: string }
+        status: { type: string, enum: [CONNECTED, DEGRADED, OFFLINE, UNKNOWN] }
+        payout_methods:
+          type: array
+          items: { $ref: '#/components/schemas/PayoutMethod' }
+    ProviderCapabilities:
+      type: object
+      properties:
+        provider: { $ref: '#/components/schemas/ProviderCode' }
+        operations:
+          type: object
+          additionalProperties:
+            type: object
+            properties:
+              supported: { type: boolean }
+              confirmation_status: { type: string, enum: [CONFIRMED, NOT_CONFIRMED] }
+        countries:
+          type: array
+          items:
+            type: object
+            properties:
+              country: { $ref: '#/components/schemas/CountryCode' }
+              currencies:
+                type: array
+                items: { $ref: '#/components/schemas/CurrencyCode' }
+              payout_methods:
+                type: array
+                items: { $ref: '#/components/schemas/PayoutMethod' }

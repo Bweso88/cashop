@@ -1,0 +1,33 @@
+# Secrets — ne jamais committer de valeurs réelles
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.jks
+secrets/
+certs/
+
+# Dépendances / builds
+node_modules/
+vendor/
+.next/
+out/
+dist/
+build/
+coverage/
+.dart_tool/
+.flutter-plugins*
+.pub-cache/
+
+# Laravel
+backend/storage/*.key
+backend/public/storage
+backend/public/hot
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
+*.log
