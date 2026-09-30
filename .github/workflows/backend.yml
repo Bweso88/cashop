@@ -1,0 +1,61 @@
+name: Backend
+
+on:
+  push:
+    paths: ['backend/**', '.github/workflows/backend.yml']
+  pull_request:
+    paths: ['backend/**', '.github/workflows/backend.yml']
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: cashop
+          POSTGRES_PASSWORD: cashop
+          POSTGRES_DB: cashop_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U cashop"
+          --health-interval 5s
+          --health-retries 10
+
+    env:
+      DB_HOST: 127.0.0.1
+      DB_PORT: 5432
+      DB_USERNAME: cashop
+      DB_PASSWORD: cashop
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: pdo_pgsql, intl, bcmath, sodium
+          coverage: none
+
+      - run: composer install --no-interaction --prefer-dist --no-progress
+
+      - name: Préparer l'environnement
+        run: |
+          cp .env.example .env
+          php artisan key:generate
+
+      - name: Style (Pint)
+        run: vendor/bin/pint --test
+
+      - name: Migrations aller-retour
+        run: |
+          DB_DATABASE=cashop_test php artisan migrate --force
+          DB_DATABASE=cashop_test php artisan migrate:rollback --force
+          DB_DATABASE=cashop_test php artisan migrate --force
+
+      - name: Tests
+        run: php artisan test

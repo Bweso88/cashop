@@ -23,7 +23,7 @@ Les applications clientes ne communiquent **jamais** directement avec les API fi
 | Phase | Contenu | État |
 |---|---|---|
 | 1 | Architecture, documentation, OpenAPI v0, infrastructure Docker | ✅ |
-| 2 | Base de données (migrations) | À venir |
+| 2 | Base de données : 54 tables, invariants PostgreSQL, seeders, tests | ✅ |
 | 3–13 | Auth, Wallet, Ledger, Mocks, Orchestrateur, API, Webhooks, Admin, Mobile, Sécurité, Tests | À venir |
 | 14 | Intégrations réelles des providers | À venir |
 
@@ -39,12 +39,30 @@ Tous les providers fonctionnent en mode **mock** jusqu'à la phase 14.
 | Mobile (`mobile/`) | Flutter, Dart |
 | Infrastructure | Docker, Nginx, PostgreSQL, Redis |
 
-## Démarrage (phase 1)
+## Démarrage
+
+Avec Docker :
 
 ```bash
-cp .env.example .env    # définir au minimum DB_PASSWORD
+cp .env.example .env    # définir au minimum DB_PASSWORD et APP_KEY
 docker compose up -d postgres redis mailpit
+docker compose --profile backend up -d
+docker compose exec api php artisan migrate --seed
 ```
+
+Sans Docker (PHP 8.3+, Composer, PostgreSQL 16) :
+
+```bash
+cd backend
+cp .env.example .env    # DB_HOST=127.0.0.1, identifiants PostgreSQL locaux
+composer install
+php artisan key:generate
+php artisan migrate --seed
+php artisan test        # nécessite une base cashop_test
+```
+
+Comptes de démonstration (local uniquement) : `client@cashop.test`, `admin@cashop.test`…
+(mot de passe dans `database/seeders/Development/DemoUserSeeder.php`).
 
 ## Documentation
 

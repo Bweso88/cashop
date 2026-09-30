@@ -23,7 +23,7 @@ l'environnement de développement ; les points ci-dessous viennent de résultats
 | Capacité | Visa Direct | MoneyGram | Western Union | MTN MoMo | Airtel Money |
 |---|---|---|---|---|---|
 | Quote | NOT CONFIRMED | OFFICIEL | NOT CONFIRMED¹ | N/A (pas de quote documentée) — NOT CONFIRMED | NOT CONFIRMED |
-| Create / Update | OFFICIEL (push funds) | OFFICIEL (update) | NOT CONFIRMED¹ | PUBLIC-SECONDAIRE | PUBLIC-SECONDAIRE |
+| Create / Update | PUBLIC-SECONDAIRE (push funds) | OFFICIEL (update) | NOT CONFIRMED¹ | PUBLIC-SECONDAIRE | PUBLIC-SECONDAIRE |
 | Commit | N/A | OFFICIEL | NOT CONFIRMED | N/A | N/A |
 | Status | NOT CONFIRMED | NOT CONFIRMED | NOT CONFIRMED | PUBLIC-SECONDAIRE | PUBLIC-SECONDAIRE |
 | Cancel | NOT CONFIRMED | NOT CONFIRMED | NOT CONFIRMED | NOT CONFIRMED | NOT CONFIRMED |

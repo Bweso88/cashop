@@ -1,6 +1,51 @@
 # Base de données Cashop
 
-PostgreSQL 16. Ce document est la spécification des migrations de la phase 2.
+PostgreSQL 16. Implémenté en phase 2 : `backend/database/migrations/`, 54 tables.
+
+Commandes utiles :
+
+```bash
+php artisan migrate --seed          # schéma + données de référence (+ démo en local/testing)
+php artisan test                    # tests sur la base cashop_test (PostgreSQL requis)
+```
+
+## Garanties portées par la base
+
+| Garantie | Mécanisme |
+|---|---|
+| Valeurs de statut/type valides | Contraintes `CHECK` générées depuis les enums PHP (`App\Support\Database\Check::enum`) |
+| Ledger équilibré par devise | Trigger de contrainte différé `ledger_entries_balanced` (vérifié au COMMIT) |
+| ≥ 2 écritures par transaction comptable | Trigger différé `ledger_transactions_min_entries` |
+| Devise écriture = devise compte | Trigger `ledger_entries_currency` |
+| Ajout seul | Trigger `cashop_forbid_mutation` sur `ledger_transactions`, `ledger_entries`, `transfer_events`, `risk_events`, `audit_logs` |
+| Capacité supportée ⇒ confirmée | `CHECK (NOT is_supported OR confirmation_status = 'CONFIRMED')` |
+| Quatre yeux sur les remboursements | `CHECK (approved_by <> requested_by)` |
+| Montants cohérents | `total_debit = send_amount + total_fees`, montants > 0, soldes ≥ 0 |
+| Anti-rejeu webhooks | Uniques (`provider_id`, `payload_sha256`) et (`provider_id`, `provider_event_id`) |
+| Idempotence | Unique (`user_id`, `key`) ; `COMPLETED` ⇒ réponse enregistrée |
+| Aucun FLOAT | Vérifié par le test `SchemaTest` |
+
+## Données initiales (seeders)
+
+| Seeder | Environnements | Contenu |
+|---|---|---|
+| `Reference\*` | tous | Devises (XAF, EUR, USD, GBP actives), pays (tous désactivés), 5 providers (désactivés) et leur matrice de capacités, niveaux KYC, rôles et permissions, comptes système du ledger, catalogue des règles de risque (inactives, sans seuil) |
+| `Development\*` | local, testing | Providers en mode `mock` et activés, corridors de test (`settings.fixture = true`, `NOT_CONFIRMED`), frais/plafonds `DEV_ONLY`, taux `DEV_ONLY_ILLUSTRATIVE` (sauf la parité fixe EUR/XAF), comptes de démo (`*@cashop.test`) |
+
+Seules 3 capacités sont `CONFIRMED` (MoneyGram : quote, update, commit), avec le lien vers la documentation.
+
+## Précisions apportées en phase 2
+
+- `users.failed_pin_count` : verrouillage du PIN de transaction.
+- `providers.mock_adapter_class` : classe Mock associée à chaque provider.
+- `kyc_levels.rank` : ordre des niveaux ; `kyc_documents.side` (`FRONT`/`BACK`).
+- `ledger_accounts.is_system` ; comptes système supplémentaires `refunds_payable` et `fx_position`.
+- `transfers.status_poll_count` / `next_status_poll_at` : planification du polling ; unique
+  (`provider_id`, `provider_reference`).
+- `refunds.idempotency_key`, `disputes.resolved_at`, `compliance_cases.closed_at`, `webhooks.source_ip`,
+  `idempotency_keys.response_status`, `provider_transactions.is_success` / `correlation_id`.
+- Tables Laravel : `sessions`, `password_reset_tokens`, `cache`, `jobs`, `personal_access_tokens` (Sanctum,
+  clés UUID), tables `spatie/laravel-permission` (clés UUID).
 
 ## Conventions
 
