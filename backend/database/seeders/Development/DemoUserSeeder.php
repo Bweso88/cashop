@@ -44,15 +44,13 @@ class DemoUserSeeder extends Seeder
             $user->forceFill(['email_verified_at' => $now, 'phone_verified_at' => $phone ? $now : null])->save();
             $user->assignRole($role);
 
-            DB::table('user_profiles')->insert([
-                'user_id' => $user->id,
-                'first_name' => encrypt($first),
-                'last_name' => encrypt($last),
+            // Via le modèle : les champs nominatifs passent par le cast "encrypted".
+            $user->profile()->create([
+                'first_name' => $first,
+                'last_name' => $last,
                 'country_of_residence' => $country,
                 'nationality' => $country,
                 'preferred_currency' => DB::table('countries')->where('code', $country)->value('default_currency'),
-                'created_at' => $now,
-                'updated_at' => $now,
             ]);
 
             if ($role !== 'customer') {

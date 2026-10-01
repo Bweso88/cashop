@@ -197,7 +197,7 @@ mobile/lib/
 | | `web/` — clients | `admin/` — back-office |
 |---|---|---|
 | Public | Utilisateurs Cashop | Employés (support, conformité, finance, admin) |
-| Auth | Sanctum SPA (cookies httpOnly + CSRF), MFA | Sanctum SPA + MFA **obligatoire**, restriction IP/VPN |
+| Auth | Jeton Sanctum gardé par le BFF (cookie httpOnly), MFA proposée | Jeton `staff` gardé par le BFF, MFA **obligatoire**, restriction IP/VPN |
 | Déploiement | Domaine public | Domaine distinct, non indexé, WAF strict |
 | API | `/api/v1` | `/api/admin/v1` (RBAC par permission) |
 

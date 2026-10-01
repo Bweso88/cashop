@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Cashop API
-  version: 0.1.0
+  version: 0.2.0
   summary: API REST de la plateforme de transferts Cashop (mobile et web).
   license:
     name: Propriétaire — tous droits réservés
@@ -42,7 +42,10 @@ paths:
     post:
       operationId: register
       tags: [Auth]
-      summary: Créer un compte (envoie un OTP)
+      summary: Créer un compte (envoie un OTP par SMS)
+      description: |
+        Anti-énumération : si l'e-mail ou le téléphone existe déjà, la réponse est identique mais
+        aucun code n'est envoyé et le challenge renvoyé est inutilisable.
       security: []
       requestBody:
         required: true
@@ -77,11 +80,22 @@ paths:
                 device: { $ref: '#/components/schemas/DeviceInfo' }
       responses:
         '202':
-          description: Second facteur requis
+          description: |
+            Mot de passe correct, second facteur requis : `totp` si la MFA est activée, sinon `sms`
+            (ou `email` sans téléphone vérifié).
           content:
             application/json:
               schema: { $ref: '#/components/schemas/OtpChallenge' }
-        '401': { $ref: '#/components/responses/Unauthorized' }
+        '401':
+          description: '`INVALID_CREDENTIALS` — même réponse que le compte existe ou non'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '423':
+          description: '`ACCOUNT_LOCKED` — trop d''échecs, verrouillage temporaire'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
         '429': { $ref: '#/components/responses/TooManyRequests' }
 
   /auth/verify-otp:
@@ -117,6 +131,93 @@ paths:
       responses:
         '204': { description: Déconnecté }
         '401': { $ref: '#/components/responses/Unauthorized' }
+  /auth/mfa/totp:
+    post:
+      tags: [Auth]
+      operationId: setupTotp
+      summary: Démarrer l'activation de la MFA (application d'authentification)
+      responses:
+        '200':
+          description: Secret à scanner (QR code de l'URI otpauth)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  secret: { type: string, description: Base32 }
+                  otpauth_uri: { type: string }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { $ref: '#/components/responses/Conflict' }
+    delete:
+      tags: [Auth]
+      operationId: disableTotp
+      summary: Désactiver la MFA (interdit au personnel)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TotpCode' }
+      responses:
+        '204': { description: MFA désactivée }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /auth/mfa/totp/confirm:
+    post:
+      tags: [Auth]
+      operationId: confirmTotp
+      summary: Confirmer l'activation avec un premier code
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TotpCode' }
+      responses:
+        '204': { description: MFA activée }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /auth/device/key:
+    post:
+      tags: [Auth]
+      operationId: registerDeviceKey
+      summary: Enregistrer la clé publique biométrique de l'appareil courant
+      description: Clé EC P-256 (recommandée) ou RSA ≥ 2048, au format PEM, générée dans le Secure Enclave / Keystore.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [public_key]
+              properties:
+                public_key: { type: string }
+      responses:
+        '204': { description: Clé enregistrée }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /auth/device/challenge:
+    post:
+      tags: [Auth]
+      operationId: deviceChallenge
+      summary: Obtenir un challenge à signer avec la clé biométrique (usage unique, 2 min)
+      responses:
+        '200':
+          description: Challenge
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  challenge_id: { type: string, format: uuid }
+                  nonce: { type: string, description: Base64 — à signer en ECDSA/RSA SHA-256 }
+                  expires_at: { type: string, format: date-time }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
   /auth/pin:
     put:
       operationId: setPin
@@ -134,7 +235,17 @@ paths:
                 pin: { type: string, pattern: '^[0-9]{6}$' }
       responses:
         '204': { description: PIN enregistré }
-        '422': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '422':
+          description: PIN trivial (suite, chiffres répétés) ou PIN actuel manquant
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '423':
+          description: '`PIN_LOCKED` — trop d''erreurs sur le PIN actuel'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
 
   /profile:
     get:
@@ -447,7 +558,9 @@ components:
     bearerAuth:
       type: http
       scheme: bearer
-      description: Jeton Sanctum (mobile). Le web utilise des cookies de session + CSRF.
+      description: |
+        Jeton Sanctum lié à un appareil (portée `customer` ou `staff`, durée limitée).
+        Les apps web et admin ne l'exposent jamais au navigateur : leur BFF le conserve côté serveur.
 
   parameters:
     IdempotencyKey:
@@ -511,7 +624,7 @@ components:
       properties:
         code:
           type: string
-          examples: [VALIDATION_ERROR, KYC_REQUIRED, RISK_REVIEW, LIMIT_EXCEEDED, INSUFFICIENT_FUNDS, QUOTE_EXPIRED, IDEMPOTENCY_CONFLICT, REQUEST_IN_PROGRESS, PROVIDER_UNAVAILABLE]
+          examples: [VALIDATION_ERROR, UNAUTHENTICATED, INVALID_CREDENTIALS, ACCOUNT_LOCKED, INVALID_OTP, PIN_INVALID, PIN_LOCKED, MFA_REQUIRED, STAFF_ONLY, TOO_MANY_REQUESTS, KYC_REQUIRED, RISK_REVIEW, LIMIT_EXCEEDED, INSUFFICIENT_FUNDS, QUOTE_EXPIRED, IDEMPOTENCY_CONFLICT, REQUEST_IN_PROGRESS, PROVIDER_UNAVAILABLE]
         message: { type: string }
         errors:
           type: object
@@ -560,6 +673,11 @@ components:
         last_name: { type: string }
         country: { $ref: '#/components/schemas/CountryCode' }
         device: { $ref: '#/components/schemas/DeviceInfo' }
+    TotpCode:
+      type: object
+      required: [code]
+      properties:
+        code: { type: string, pattern: '^[0-9]{6}$' }
     OtpChallenge:
       type: object
       properties:
@@ -584,6 +702,8 @@ components:
         first_name: { type: string }
         last_name: { type: string }
         country: { $ref: '#/components/schemas/CountryCode' }
+        email_verified: { type: boolean }
+        phone_verified: { type: boolean }
         kyc_level: { type: string, examples: [LEVEL_1] }
         kyc_status: { $ref: '#/components/schemas/KycStatus' }
         mfa_enabled: { type: boolean }

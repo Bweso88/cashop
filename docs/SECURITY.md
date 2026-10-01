@@ -13,7 +13,22 @@ ce qui réduit le périmètre. Périmètre exact : **NOT CONFIRMED — dépend d
 | MFA | TOTP (RFC 6238) ; obligatoire pour l'admin, proposée aux clients, imposée par le moteur de risque (step-up) |
 | PIN de transaction | 6 chiffres, Argon2id, distinct du mot de passe, verrouillage après N échecs |
 | Biométrie (mobile) | `local_auth` déverrouille une clé privée liée à l'appareil (Secure Enclave / Android Keystore) ; le serveur envoie un challenge, l'app le signe, le serveur vérifie avec la clé publique enregistrée (`user_devices.public_key`). La biométrie ne quitte jamais l'appareil. |
-| Sessions | Mobile : jetons Sanctum à portée limitée (abilities) et révocables par appareil. Web/admin : cookies httpOnly, `Secure`, `SameSite=Lax`, protection CSRF Sanctum. Admin : session courte, ré-authentification pour les actions sensibles. |
+| Sessions | Jetons Sanctum, un par appareil, portée `customer` ou `staff`, expiration (12 h clients, 1 h personnel), révocables. Mobile : stockage sécurisé. Web/admin : le BFF Next.js garde le jeton côté serveur dans un cookie httpOnly `Secure` `SameSite=Lax` et protège ses propres formulaires contre le CSRF ; le jeton n'atteint jamais le JavaScript du navigateur. |
+
+**Implémenté en phase 3 :**
+
+| Élément | Comportement |
+|---|---|
+| Connexion | Mot de passe, puis second facteur systématique : TOTP si MFA activée, sinon OTP SMS (e-mail à défaut de téléphone vérifié) |
+| Anti-énumération | Inscription avec e-mail/téléphone existant : réponse identique, aucun code envoyé. Login : même erreur `INVALID_CREDENTIALS`, hash factice calculé si le compte n'existe pas |
+| Verrouillage | 5 échecs de mot de passe → compte verrouillé 15 min (`AUTH_MAX_FAILED_LOGINS`, `AUTH_LOCKOUT_MINUTES`) |
+| OTP | 6 chiffres, HMAC-SHA256 en base, 5 min, 5 tentatives, 5 envois/heure par destination, usage unique |
+| TOTP | RFC 6238 (vérifié contre les vecteurs officiels), secret chiffré en base, tolérance ±30 s, anti-rejeu par pas de temps |
+| PIN | 6 chiffres, Argon2id, PIN triviaux refusés, blocage après 5 erreurs (`PIN_LOCKED`) |
+| Biométrie | Clé EC P-256 / RSA ≥ 2048 enregistrée par appareil ; challenge de 32 octets à usage unique, valable 2 min |
+| Personnel | Zone `/api/admin/v1` : rôle du personnel + jeton `staff` + MFA activée obligatoires ; MFA non désactivable |
+| Débit | `auth` 10/min par IP et 5/min par identifiant ; `sensitive` (PIN, MFA) 5/min ; 120/min par utilisateur |
+| Erreurs | Format unique `{code, message, errors, correlation_id}`, aucun détail interne exposé |
 
 **Confirmation d'un transfert :** quote valide + PIN **ou** signature biométrique + (step-up OTP si le moteur
 de risque l'exige). Le jeton de preuve est à usage unique et lié à l'identifiant de quote.

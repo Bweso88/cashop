@@ -1,7 +1,7 @@
 # API Cashop
 
 Spécification de référence : [`openapi.yaml`](openapi.yaml) (OpenAPI 3.1, validée par `redocly lint`).
-Base : `/api/v1` (clients) et `/api/admin/v1` (back-office, phase 10).
+Base : `/api/v1` (clients) et `/api/admin/v1` (back-office : personnel, MFA obligatoire ; `GET /me` disponible, le reste en phase 10).
 
 ## Conventions
 
@@ -25,6 +25,10 @@ Base : `/api/v1` (clients) et `/api/admin/v1` (back-office, phase 10).
 | POST | `/auth/verify-otp` | Validation du second facteur → jeton | — |
 | POST | `/auth/logout` | Révocation du jeton | — |
 | PUT | `/auth/pin` | PIN de transaction | — |
+| POST / DELETE | `/auth/mfa/totp` | Démarrer / désactiver la MFA TOTP | — |
+| POST | `/auth/mfa/totp/confirm` | Confirmer la MFA | — |
+| POST | `/auth/device/key` | Clé publique biométrique de l'appareil | — |
+| POST | `/auth/device/challenge` | Challenge à signer | — |
 | GET | `/profile` | Profil | — |
 | GET | `/wallet` | Portefeuilles et soldes | — |
 | GET | `/wallet/transactions` | Historique | — |
@@ -45,6 +49,12 @@ Base : `/api/v1` (clients) et `/api/admin/v1` (back-office, phase 10).
 |---|---|---|
 | `VALIDATION_ERROR` | 422 | Données invalides |
 | `UNAUTHENTICATED` | 401 | Jeton absent ou expiré |
+| `INVALID_CREDENTIALS` | 401 | Identifiants incorrects (sans préciser lequel) |
+| `INVALID_OTP` | 401 | Code invalide, expiré, déjà utilisé ou tentatives épuisées |
+| `ACCOUNT_LOCKED` | 423 | Verrouillage temporaire après échecs |
+| `PIN_INVALID` / `PIN_LOCKED` | 401 / 423 | PIN de transaction |
+| `MFA_REQUIRED` / `STAFF_ONLY` | 403 | Accès back-office |
+| `TOO_MANY_REQUESTS` | 429 | Limite de débit (en-tête `Retry-After`) |
 | `KYC_REQUIRED` | 403 | Niveau KYC insuffisant |
 | `RISK_REVIEW` / `RISK_BLOCKED` | 403 | Décision du moteur de risque |
 | `STEP_UP_REQUIRED` | 403 | OTP supplémentaire exigé |

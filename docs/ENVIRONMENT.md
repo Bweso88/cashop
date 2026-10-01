@@ -16,6 +16,12 @@ En production, les valeurs viennent du gestionnaire de secrets et sont injectée
 | `WEBHOOK_SIGNING_SECRET` | oui | HMAC des webhooks des mocks et des jetons d'URL de callback |
 | `IDEMPOTENCY_TTL_HOURS` | non (24) | Durée de conservation des clés d'idempotence |
 | `<PROVIDER>_MODE` | oui | `mock`, `sandbox`, `production` — `mock` par défaut |
+| `HASH_DRIVER` | oui | `argon2id` (mots de passe et PIN) |
+| `AUTH_TOKEN_TTL_MINUTES` / `AUTH_STAFF_TOKEN_TTL_MINUTES` | non (720 / 60) | Durée de vie des jetons clients / personnel |
+| `AUTH_MAX_FAILED_LOGINS` / `AUTH_LOCKOUT_MINUTES` | non (5 / 15) | Verrouillage après échecs de mot de passe |
+| `OTP_TTL_MINUTES` / `OTP_MAX_ATTEMPTS` / `OTP_MAX_SENDS_PER_HOUR` | non (5 / 5 / 5) | Codes à usage unique |
+| `PIN_MAX_ATTEMPTS` | non (5) | Blocage du PIN de transaction |
+| `TOTP_ISSUER` | non (Cashop) | Nom affiché dans l'application d'authentification |
 
 ## Providers
 
@@ -38,7 +44,7 @@ En production, les valeurs viennent du gestionnaire de secrets et sont injectée
 | `FX_RATES_PROVIDER` | `manual` (saisie admin) tant qu'aucun fournisseur de taux n'est choisi |
 | `KYC_VENDOR` | `manual` tant qu'aucun fournisseur KYC n'est choisi |
 | `SANCTIONS_SCREENING_VENDOR` | `none` en dev ; **obligatoire** avant la production |
-| `SMS_PROVIDER` | `log` en dev (les OTP sont écrits dans les logs locaux uniquement) |
+| `SMS_PROVIDER` | `log` en dev (les OTP sont écrits dans les logs locaux ; refusé en production). Aucune autre valeur n'est implémentée : fournisseur à choisir, toute autre valeur fait échouer l'envoi |
 | `SENTRY_LARAVEL_DSN` / `OTEL_EXPORTER_OTLP_ENDPOINT` | Observabilité |
 
 ## Front-ends

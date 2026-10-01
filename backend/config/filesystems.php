@@ -33,7 +33,7 @@ return [
         'local' => [
             'driver' => 'local',
             'root' => storage_path('app/private'),
-            'serve' => true,
+            'serve' => false, // jamais de service HTTP direct des fichiers (documents KYC)
             'throw' => false,
             'report' => false,
         ],

@@ -24,7 +24,8 @@ Les applications clientes ne communiquent **jamais** directement avec les API fi
 |---|---|---|
 | 1 | Architecture, documentation, OpenAPI v0, infrastructure Docker | ✅ |
 | 2 | Base de données : 54 tables, invariants PostgreSQL, seeders, tests | ✅ |
-| 3–13 | Auth, Wallet, Ledger, Mocks, Orchestrateur, API, Webhooks, Admin, Mobile, Sécurité, Tests | À venir |
+| 3 | Authentification : inscription, OTP, MFA TOTP, PIN, biométrie, RBAC, audit chaîné | ✅ |
+| 4–13 | Wallet, Ledger, Mocks, Orchestrateur, API, Webhooks, Admin, Mobile, Sécurité, Tests | À venir |
 | 14 | Intégrations réelles des providers | À venir |
 
 Tous les providers fonctionnent en mode **mock** jusqu'à la phase 14.

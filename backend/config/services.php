@@ -35,4 +35,9 @@ return [
         ],
     ],
 
+    // Envoi des OTP : "log" en développement uniquement. Fournisseur réel à choisir (NOT CONFIRMED).
+    'sms' => [
+        'provider' => env('SMS_PROVIDER', 'log'),
+    ],
+
 ];
