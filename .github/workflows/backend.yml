@@ -25,12 +25,20 @@ jobs:
           --health-cmd "pg_isready -U cashop -d cashop_test"
           --health-interval 5s
           --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-retries 10
 
     env:
       DB_HOST: 127.0.0.1
       DB_PORT: 5432
       DB_USERNAME: cashop
       DB_PASSWORD: cashop
+      REDIS_HOST: 127.0.0.1
 
     steps:
       - uses: actions/checkout@v4
