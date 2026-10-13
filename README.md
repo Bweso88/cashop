@@ -25,10 +25,14 @@ Les applications clientes ne communiquent **jamais** directement avec les API fi
 | 1 | Architecture, documentation, OpenAPI v0, infrastructure Docker | ✅ |
 | 2 | Base de données : 54 tables, invariants PostgreSQL, seeders, tests | ✅ |
 | 3 | Authentification : inscription, OTP, MFA TOTP, PIN, biométrie, RBAC, audit chaîné | ✅ |
-| 4–13 | Wallet, Ledger, Mocks, Orchestrateur, API, Webhooks, Admin, Mobile, Sécurité, Tests | À venir |
-| 14 | Intégrations réelles des providers | À venir |
+| — | Écrans web (Next.js) et mobile (Flutter) : fondations | ✅ (données de démonstration) |
+| 4 | Parcours d'envoi simulé complet : devis, paiement Mobile Money simulé, transfert simulé, rapprochement, remboursement automatique, reçus, ledger, webhooks signés | ✅ backend · branchement web/mobile en cours |
+| — | Réception, réclamations, notifications, portail admin, conformité | À venir |
+| 14 | Connecteurs officiels (MTN, Airtel, Western Union, MoneyGram, Ria) | Dépend de la documentation et des accès partenaires |
 
-Tous les providers fonctionnent en mode **mock** jusqu'à la phase 14.
+Cashop ne détient pas de fonds clients ([ADR 0004](docs/adr/0004-sans-portefeuille-client.md)).
+Tous les prestataires fonctionnent en **simulation** : aucun fonds réel n'est déplacé, les références
+`SIM-…` ne sont reconnues par aucun réseau. Cycle de vie d'un envoi : [docs/TRANSFER-STATES.md](docs/TRANSFER-STATES.md).
 
 ## Stack
 

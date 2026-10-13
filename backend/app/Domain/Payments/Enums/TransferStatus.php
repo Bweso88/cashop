@@ -5,52 +5,57 @@ namespace App\Domain\Payments\Enums;
 use App\Support\Enums\HasValues;
 
 /**
- * Cycle de vie d'un transfert (docs/ARCHITECTURE.md §5).
+ * Machine à états d'un transfert (docs/TRANSFER-STATES.md).
+ *
+ * Cashop ne détient pas de fonds : le client finance chaque transfert par Mobile Money, puis le
+ * transfert est créé auprès du réseau. Un statut ne progresse que sur confirmation effective du
+ * prestataire ; un résultat inconnu mène à REQUIRES_RECONCILIATION, jamais à un succès supposé.
  */
 enum TransferStatus: string
 {
     use HasValues;
 
-    case Quoted = 'QUOTED';
-    case AwaitingConfirmation = 'AWAITING_CONFIRMATION';
-    case Authorized = 'AUTHORIZED';
-    case FundsReserved = 'FUNDS_RESERVED';
-    case Submitted = 'SUBMITTED';
-    case Pending = 'PENDING';
-    case Processing = 'PROCESSING';
-    case Completed = 'COMPLETED';
+    case Initiated = 'INITIATED';
+    case QuotePending = 'QUOTE_PENDING';
+    case QuoteConfirmed = 'QUOTE_CONFIRMED';
+    case PaymentPending = 'PAYMENT_PENDING';
+    case PaymentConfirmed = 'PAYMENT_CONFIRMED';
+    case TransferPending = 'TRANSFER_PENDING';
+    case TransferConfirmed = 'TRANSFER_CONFIRMED';
+    case TransferAvailableForPickup = 'TRANSFER_AVAILABLE_FOR_PICKUP';
+    case PayoutPending = 'PAYOUT_PENDING';
+    case PayoutConfirmed = 'PAYOUT_CONFIRMED';
     case Failed = 'FAILED';
-    case Reversed = 'REVERSED';
-    case Unknown = 'UNKNOWN';
-    case CancelRequested = 'CANCEL_REQUESTED';
+    case CancelPending = 'CANCEL_PENDING';
     case Cancelled = 'CANCELLED';
     case RefundPending = 'REFUND_PENDING';
     case Refunded = 'REFUNDED';
-    case Expired = 'EXPIRED';
-    case RejectedKyc = 'REJECTED_KYC';
-    case RejectedRisk = 'REJECTED_RISK';
+    case RequiresReconciliation = 'REQUIRES_RECONCILIATION';
 
     /** @return list<self> */
     public function allowedTransitions(): array
     {
         return match ($this) {
-            self::Quoted => [self::AwaitingConfirmation, self::Expired],
-            self::AwaitingConfirmation => [self::Authorized, self::RejectedKyc, self::RejectedRisk, self::Expired, self::Cancelled],
-            self::Authorized => [self::FundsReserved, self::Cancelled],
-            self::FundsReserved => [self::Submitted, self::Failed],
-            self::Submitted => [self::Pending, self::Processing, self::Completed, self::Failed, self::Unknown],
-            self::Pending => [self::Processing, self::Completed, self::Failed, self::Unknown, self::CancelRequested],
-            self::Processing => [self::Completed, self::Failed, self::Unknown, self::CancelRequested],
-            // Réconciliation : l'état réel est relu chez le provider.
-            self::Unknown => [self::Pending, self::Processing, self::Completed, self::Failed],
-            // L'annulation peut être refusée par le provider : retour à l'état réel.
-            self::CancelRequested => [self::Cancelled, self::Pending, self::Processing, self::Completed, self::Failed],
-            // Extourne comptable uniquement si des fonds avaient été réservés.
-            self::Cancelled => [self::Reversed],
-            self::Failed => [self::Reversed],
-            self::Completed => [self::RefundPending],
-            self::RefundPending => [self::Refunded, self::Completed],
-            self::Reversed, self::Refunded, self::Expired, self::RejectedKyc, self::RejectedRisk => [],
+            self::Initiated => [self::QuotePending, self::QuoteConfirmed, self::Cancelled],
+            self::QuotePending => [self::QuoteConfirmed, self::Failed, self::Cancelled],
+            self::QuoteConfirmed => [self::PaymentPending, self::Cancelled],
+            // Paiement refusé : aucun fonds prélevé, échec sans remboursement.
+            self::PaymentPending => [self::PaymentConfirmed, self::Failed, self::RequiresReconciliation],
+            // Fonds prélevés : seule issue sans livraison = remboursement.
+            self::PaymentConfirmed => [self::TransferPending, self::TransferConfirmed, self::TransferAvailableForPickup, self::RefundPending, self::RequiresReconciliation],
+            self::TransferPending => [self::TransferConfirmed, self::TransferAvailableForPickup, self::PayoutPending, self::RefundPending, self::RequiresReconciliation],
+            // Le réseau peut encore annuler (transfert non retiré, versement rejeté) : remboursement.
+            self::TransferConfirmed => [self::TransferAvailableForPickup, self::PayoutPending, self::PayoutConfirmed, self::CancelPending, self::RefundPending],
+            self::TransferAvailableForPickup => [self::PayoutConfirmed, self::CancelPending, self::RefundPending],
+            self::PayoutPending => [self::PayoutConfirmed, self::RefundPending, self::RequiresReconciliation],
+            self::CancelPending => [self::RefundPending, self::TransferConfirmed, self::TransferAvailableForPickup],
+            self::RefundPending => [self::Refunded, self::RequiresReconciliation],
+            // Le rapprochement constate l'état réel chez les prestataires.
+            self::RequiresReconciliation => [
+                self::PaymentConfirmed, self::Failed, self::TransferPending, self::TransferConfirmed,
+                self::TransferAvailableForPickup, self::PayoutConfirmed, self::RefundPending, self::Refunded,
+            ],
+            self::PayoutConfirmed, self::Failed, self::Cancelled, self::Refunded => [],
         };
     }
 
@@ -62,5 +67,41 @@ enum TransferStatus: string
     public function isTerminal(): bool
     {
         return $this->allowedTransitions() === [];
+    }
+
+    /** Fonds du client prélevés et non restitués : la plateforme a une obligation envers lui. */
+    public function holdsCustomerFunds(): bool
+    {
+        return in_array($this, [
+            self::PaymentConfirmed, self::TransferPending, self::RefundPending, self::CancelPending, self::PayoutPending,
+        ], true);
+    }
+
+    /** Le transfert a été accepté par le réseau (succès côté expéditeur). */
+    public function isDelivered(): bool
+    {
+        return in_array($this, [self::TransferConfirmed, self::TransferAvailableForPickup, self::PayoutConfirmed], true);
+    }
+
+    public function label(): string
+    {
+        return match ($this) {
+            self::Initiated => 'Créé',
+            self::QuotePending => 'Devis en cours',
+            self::QuoteConfirmed => 'Devis accepté',
+            self::PaymentPending => 'En attente de votre validation Mobile Money',
+            self::PaymentConfirmed => 'Paiement confirmé',
+            self::TransferPending => 'Transfert en cours auprès du réseau',
+            self::TransferConfirmed => 'Transfert confirmé par le réseau',
+            self::TransferAvailableForPickup => 'Disponible au retrait en agence',
+            self::PayoutPending => 'Versement en cours',
+            self::PayoutConfirmed => 'Versé au bénéficiaire',
+            self::Failed => 'Échoué',
+            self::CancelPending => 'Annulation en cours',
+            self::Cancelled => 'Annulé',
+            self::RefundPending => 'Remboursement en cours',
+            self::Refunded => 'Remboursé',
+            self::RequiresReconciliation => 'Vérification en cours auprès des prestataires',
+        };
     }
 }

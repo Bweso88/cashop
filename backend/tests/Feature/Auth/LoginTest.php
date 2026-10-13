@@ -16,7 +16,7 @@ class LoginTest extends AuthTestCase
         $this->login('client@cashop.test')
             ->assertStatus(202)
             ->assertJsonPath('channel', 'sms')
-            ->assertJsonPath('destination_hint', '+237•••••••01');
+            ->assertJsonPath('destination_hint', '+242•••••••01');
 
         $token = $this->tokenFor('client@cashop.test');
 
@@ -31,7 +31,7 @@ class LoginTest extends AuthTestCase
     #[Test]
     public function connexion_par_numero_de_telephone(): void
     {
-        $this->login('+237690000001')->assertStatus(202)->assertJsonPath('channel', 'sms');
+        $this->login('+242060000001')->assertStatus(202)->assertJsonPath('channel', 'sms');
     }
 
     #[Test]

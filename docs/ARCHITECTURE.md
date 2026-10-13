@@ -18,13 +18,13 @@
  │ Application (Actions) ──► PaymentOrchestrator ──► FeeEngine · FxService · Risk      │
  │                                   ▼                                                 │
  │                          ProviderRegistry ──► Provider Adapters (réels | Mock)      │
- │ Domain : Identity · Wallet · Ledger · Payments · Kyc · Risk · Webhooks · Audit      │
+ │ Domain : Identity · Ledger · Payments · Providers · Kyc · Risk · Webhooks · Audit   │
  └──────┬──────────────────┬──────────────────────┬───────────────────┬───────────────┘
    PostgreSQL 16       Redis 7                Horizon workers        Vault / KMS
    (ledger = vérité)   cache, verrous,        jobs, retries,         secrets, certificats
                        rate limit, queue      polling, réconciliation mTLS
                                                   ▼
-          Visa Direct · MoneyGram · Western Union · MTN MoMo · Airtel Money · (Orange, Wave, banques…)
+          MTN MoMo · Airtel Money (paiement) · Western Union · MoneyGram · Ria (réseaux) · Visa (plus tard)
 ```
 
 **Règle absolue :** les clients (mobile, web, admin) ne parlent **qu'à l'API Cashop**. Aucun identifiant,
@@ -50,10 +50,11 @@ Domain/<Module>/
 | Module | Responsabilité | Dépend de |
 |---|---|---|
 | `Identity` | Inscription, login, OTP, MFA, PIN, appareils, RBAC | — |
-| `Wallet` | Portefeuilles, soldes (projection), historique | Ledger |
 | `Ledger` | Partie double, invariants, réconciliation | — |
-| `Payments` | Orchestrateur, quotes, transferts, remboursements, litiges | Ledger, Wallet, Fx, Fees, Risk, Kyc, Providers |
-| `Providers` | Interface, registry, adapters, clients, mocks, santé | — (n'appelle jamais le domaine) |
+| `Payments` | Orchestrateur, devis, transferts, remboursements, rapprochement, reçus | Ledger, Fx, Fees, Risk, Kyc, Providers |
+| `Providers` | Contrats de connecteurs, registre par environnement, connecteurs simulés (officiels à venir) | — (n'appelle jamais le domaine) |
+
+Cashop ne détient pas de fonds clients : pas de module portefeuille ([ADR 0004](adr/0004-sans-portefeuille-client.md)).
 | `Fx` / `Fees` | Taux, spreads, règles de frais | — |
 | `Kyc` | Profils, documents, vérifications, niveaux, limites | Identity |
 | `Risk` | Règles, scores, événements, dossiers de conformité, sanctions | Kyc |
@@ -171,7 +172,7 @@ QUOTED ─► AWAITING_CONFIRMATION ─► AUTHORIZED ─► FUNDS_RESERVED ─�
 ## 6. Ledger
 
 Voir [DATABASE.md §Ledger](DATABASE.md#ledger). Résumé : partie double, écritures immuables, Σdébits = Σcrédits
-par `ledger_transaction`, soldes wallet = projection, réconciliation quotidienne.
+par `ledger_transaction`, fonds en transit tracés (`in_flight`), pas de solde client, réconciliation quotidienne.
 
 ## 7. Mobile (Flutter)
 
@@ -180,7 +181,7 @@ mobile/lib/
 ├── core/        # config, thème, router (go_router), client Dio, stockage sécurisé, erreurs
 ├── shared/      # widgets design system, formatage monétaire, validateurs
 └── features/<feature>/{data,domain,presentation}
-     auth · onboarding · home · wallet · send · receive · beneficiaries · quote
+     auth · onboarding · home · send · receive · beneficiaries · quote
      transfer (confirmation/auth/processing/success/failed/details) · history
      notifications · profile · kyc · security · settings
 ```
@@ -204,7 +205,7 @@ mobile/lib/
 Structure commune : App Router, TypeScript strict, Tailwind, `src/lib/api` (client typé généré depuis
 `docs/openapi.yaml`), Server Components pour les données sensibles, aucune clé côté navigateur.
 
-Écrans admin : Dashboard, Transactions (timeline), Users, KYC, Wallets, Providers, Provider Health, Fees, FX,
+Écrans admin : Dashboard, Transactions (timeline), Users, KYC, Rapprochement, Providers, Provider Health, Fees, FX,
 Refunds, Disputes, Risk, Compliance, Reports, Audit Logs, Settings — tables avec filtres, recherche,
 pagination serveur, graphiques.
 

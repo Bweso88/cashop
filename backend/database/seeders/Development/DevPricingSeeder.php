@@ -9,8 +9,9 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 /**
- * Frais, taux et plafonds FICTIFS pour le développement. Aucune de ces valeurs n'est un tarif
- * provider ni une règle réglementaire : en production, la finance et la conformité les saisissent.
+ * Frais Cashop, taux et plafonds FICTIFS pour la démonstration. Aucune de ces valeurs n'est un
+ * tarif de prestataire ni une règle réglementaire : en production, la finance et la conformité
+ * de l'établissement exploitant les saisissent.
  */
 class DevPricingSeeder extends Seeder
 {
@@ -23,61 +24,43 @@ class DevPricingSeeder extends Seeder
 
         $now = now();
 
-        // Parité fixe EUR/XAF (1 EUR = 655,957 XAF) ; les autres taux sont illustratifs.
+        // Parités fixes : 1 EUR = 655,957 XAF = 655,957 XOF. Les autres taux sont illustratifs.
         $rates = [
-            ['EUR', 'XAF', '655.957000000000', 'FIXED_PARITY'],
-            ['EUR', 'USD', '1.080000000000', 'DEV_ONLY_ILLUSTRATIVE'],
-            ['EUR', 'GBP', '0.850000000000', 'DEV_ONLY_ILLUSTRATIVE'],
+            ['EUR', 'XAF', '655.957000000000', 0, 'FIXED_PARITY'],
+            ['EUR', 'XOF', '655.957000000000', 0, 'FIXED_PARITY'],
+            ['EUR', 'USD', '1.080000000000', 150, 'DEV_ONLY_ILLUSTRATIVE'],
+            ['EUR', 'GBP', '0.850000000000', 150, 'DEV_ONLY_ILLUSTRATIVE'],
         ];
-        foreach ($rates as [$base, $quote, $rate, $source]) {
+        foreach ($rates as [$base, $quote, $rate, $spread, $source]) {
             DB::table('fx_rates')->insert([
-                'id' => (string) Str::uuid7(),
-                'base_currency' => $base,
-                'quote_currency' => $quote,
-                'rate' => $rate,
-                'spread_bps' => $source === 'FIXED_PARITY' ? 0 : 100,
-                'source' => $source,
-                'valid_from' => $now,
-                'created_at' => $now,
-                'updated_at' => $now,
+                'id' => (string) Str::uuid7(), 'base_currency' => $base, 'quote_currency' => $quote, 'rate' => $rate,
+                'spread_bps' => $spread, 'source' => $source, 'valid_from' => $now, 'created_at' => $now, 'updated_at' => $now,
             ]);
         }
 
+        // Frais de service Cashop (en plus des frais du réseau), en XAF.
         $fees = [
-            ['DEV_ONLY frais fixes EUR', FeeComponent::Fixed, 'EUR', 99, 0],
-            ['DEV_ONLY commission EUR', FeeComponent::Percentage, 'EUR', 0, 150],
-            ['DEV_ONLY frais fixes XAF', FeeComponent::Fixed, 'XAF', 500, 0],
-            ['DEV_ONLY commission XAF', FeeComponent::Percentage, 'XAF', 0, 150],
+            ['DEV_ONLY frais de service fixes', FeeComponent::Fixed, 500, 0],
+            ['DEV_ONLY frais de service proportionnels', FeeComponent::Percentage, 0, 50],
         ];
-        foreach ($fees as [$name, $component, $currency, $fixed, $bps]) {
+        foreach ($fees as [$name, $component, $fixed, $bps]) {
             DB::table('fees')->insert([
-                'id' => (string) Str::uuid7(),
-                'name' => $name,
-                'component' => $component->value,
-                'currency_code' => $currency,
-                'fixed_amount' => $fixed,
-                'percentage_bps' => $bps,
-                'valid_from' => $now,
-                'created_at' => $now,
-                'updated_at' => $now,
+                'id' => (string) Str::uuid7(), 'name' => $name, 'component' => $component->value, 'currency_code' => 'XAF',
+                'source_country' => 'CG', 'fixed_amount' => $fixed, 'percentage_bps' => $bps, 'valid_from' => $now,
+                'created_at' => $now, 'updated_at' => $now,
             ]);
         }
 
-        // Plafonds DEV_ONLY (unités mineures) — LEVEL_0 ne peut pas envoyer.
+        // Plafonds DEV_ONLY en XAF (montant envoyé).
         $limits = [
-            ['LEVEL_1', LimitScope::PerTransaction, 'EUR', 100_000], ['LEVEL_1', LimitScope::Monthly, 'EUR', 500_000],
-            ['LEVEL_1', LimitScope::PerTransaction, 'XAF', 650_000], ['LEVEL_1', LimitScope::Monthly, 'XAF', 3_250_000],
-            ['LEVEL_2', LimitScope::PerTransaction, 'EUR', 1_000_000], ['LEVEL_2', LimitScope::Monthly, 'EUR', 5_000_000],
+            ['LEVEL_0', LimitScope::PerTransaction, 200_000], ['LEVEL_0', LimitScope::Monthly, 500_000],
+            ['LEVEL_1', LimitScope::PerTransaction, 1_000_000], ['LEVEL_1', LimitScope::Monthly, 5_000_000],
+            ['LEVEL_2', LimitScope::PerTransaction, 5_000_000], ['LEVEL_2', LimitScope::Monthly, 20_000_000],
         ];
-        foreach ($limits as [$level, $scope, $currency, $max]) {
+        foreach ($limits as [$level, $scope, $max]) {
             DB::table('limit_rules')->insert([
-                'id' => (string) Str::uuid7(),
-                'kyc_level_code' => $level,
-                'scope' => $scope->value,
-                'currency_code' => $currency,
-                'max_amount' => $max,
-                'created_at' => $now,
-                'updated_at' => $now,
+                'id' => (string) Str::uuid7(), 'kyc_level_code' => $level, 'scope' => $scope->value, 'currency_code' => 'XAF',
+                'max_amount' => $max, 'created_at' => $now, 'updated_at' => $now,
             ]);
         }
     }

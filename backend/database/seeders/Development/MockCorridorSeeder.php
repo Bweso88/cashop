@@ -12,27 +12,34 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 /**
- * Corridors de TEST pour les Mock providers. Ils ne décrivent PAS la couverture réelle des
- * providers (NOT_CONFIRMED) : ce sont des fixtures permettant d'exercer tous les parcours.
+ * Corridors de TEST au départ du Congo-Brazzaville, pour les connecteurs simulés.
+ * Ils ne décrivent PAS la couverture réelle des prestataires (NOT_CONFIRMED) : la liste
+ * officielle des pays et modes de réception sera fournie par chaque réseau.
  */
 class MockCorridorSeeder extends Seeder
 {
-    /** provider => [[pays, devise, direction, modes de réception]] */
-    private const CORRIDORS = [
-        'mtn_momo' => [['CM', 'XAF', ProviderDirection::Both, [PayoutMethod::MobileMoney]]],
-        'airtel_money' => [['CG', 'XAF', ProviderDirection::Both, [PayoutMethod::MobileMoney]]],
-        'visa_direct' => [
-            ['FR', 'EUR', ProviderDirection::Both, [PayoutMethod::Card]],
-            ['GB', 'GBP', ProviderDirection::Both, [PayoutMethod::Card]],
-            ['US', 'USD', ProviderDirection::Both, [PayoutMethod::Card]],
+    public const ORIGIN = 'CG';
+
+    /** Réseau => [pays de destination => [devise, modes de réception]] */
+    public const CORRIDORS = [
+        'western_union' => [
+            'FR' => ['EUR', [PayoutMethod::CashPickup]],
+            'BE' => ['EUR', [PayoutMethod::CashPickup]],
+            'CM' => ['XAF', [PayoutMethod::CashPickup, PayoutMethod::MobileMoney]],
+            'CI' => ['XOF', [PayoutMethod::CashPickup]],
+            'US' => ['USD', [PayoutMethod::CashPickup]],
         ],
         'moneygram' => [
-            ['CM', 'XAF', ProviderDirection::Receive, [PayoutMethod::CashPickup]],
-            ['GA', 'XAF', ProviderDirection::Receive, [PayoutMethod::CashPickup]],
+            'FR' => ['EUR', [PayoutMethod::CashPickup]],
+            'CM' => ['XAF', [PayoutMethod::CashPickup]],
+            'SN' => ['XOF', [PayoutMethod::CashPickup, PayoutMethod::MobileMoney]],
+            'GB' => ['GBP', [PayoutMethod::CashPickup]],
         ],
-        'western_union' => [
-            ['CM', 'XAF', ProviderDirection::Receive, [PayoutMethod::CashPickup]],
-            ['TD', 'XAF', ProviderDirection::Receive, [PayoutMethod::CashPickup]],
+        'ria' => [
+            'FR' => ['EUR', [PayoutMethod::CashPickup]],
+            'CI' => ['XOF', [PayoutMethod::CashPickup, PayoutMethod::MobileMoney]],
+            'CM' => ['XAF', [PayoutMethod::CashPickup]],
+            'US' => ['USD', [PayoutMethod::CashPickup]],
         ],
     ];
 
@@ -41,51 +48,47 @@ class MockCorridorSeeder extends Seeder
         $now = now();
         $providers = DB::table('providers')->pluck('id', 'code');
 
-        DB::table('providers')->update(['mode' => ProviderMode::Mock->value, 'is_enabled' => true]);
-        DB::table('countries')->update(['is_send_enabled' => true, 'is_receive_enabled' => true]);
+        // Simulation activée pour les portefeuilles et les réseaux ; Visa reste désactivé (phase ultérieure).
+        DB::table('providers')->whereIn('code', ['mtn_momo', 'airtel_money', 'western_union', 'moneygram', 'ria'])
+            ->update(['mode' => ProviderMode::Mock->value, 'is_enabled' => true]);
+        DB::table('countries')->where('code', self::ORIGIN)->update(['is_send_enabled' => true, 'is_receive_enabled' => true]);
 
-        foreach (self::CORRIDORS as $code => $corridors) {
-            foreach ($corridors as [$country, $currency, $direction, $payoutMethods]) {
-                DB::table('provider_country_configs')->insertOrIgnore([
-                    'id' => (string) Str::uuid7(),
-                    'provider_id' => $providers[$code],
-                    'country_code' => $country,
-                    'currency_code' => $currency,
-                    'direction' => $direction->value,
-                    'mode' => ProviderMode::Mock->value,
-                    'is_enabled' => true,
-                    'settings' => json_encode(['fixture' => true]),
-                    'confirmation_status' => ConfirmationStatus::NotConfirmed->value,
-                    'created_at' => $now,
-                    'updated_at' => $now,
-                ]);
-                foreach ($payoutMethods as $method) {
+        $config = fn (string $provider, string $country, string $currency, ProviderDirection $direction) => DB::table('provider_country_configs')->insertOrIgnore([
+            'id' => (string) Str::uuid7(),
+            'provider_id' => $providers[$provider],
+            'country_code' => $country,
+            'currency_code' => $currency,
+            'direction' => $direction->value,
+            'mode' => ProviderMode::Mock->value,
+            'is_enabled' => true,
+            'settings' => json_encode(['fixture' => true]),
+            'confirmation_status' => ConfirmationStatus::NotConfirmed->value,
+            'created_at' => $now,
+            'updated_at' => $now,
+        ]);
+
+        // Financement (collecte) et versement Mobile Money au Congo.
+        foreach (['mtn_momo', 'airtel_money'] as $wallet) {
+            $config($wallet, self::ORIGIN, 'XAF', ProviderDirection::Both);
+            DB::table('country_payment_methods')->insertOrIgnore([
+                'id' => (string) Str::uuid7(), 'country_code' => self::ORIGIN, 'method' => PaymentMethod::MobileMoney->value,
+                'provider_id' => $providers[$wallet], 'currency_code' => 'XAF', 'is_enabled' => true, 'created_at' => $now, 'updated_at' => $now,
+            ]);
+        }
+
+        foreach (self::CORRIDORS as $network => $destinations) {
+            $config($network, self::ORIGIN, 'XAF', ProviderDirection::Send);
+            foreach ($destinations as $country => [$currency, $methods]) {
+                DB::table('countries')->where('code', $country)->update(['is_receive_enabled' => true]);
+                $config($network, $country, $currency, ProviderDirection::Receive);
+                foreach ($methods as $method) {
                     DB::table('country_payout_methods')->insertOrIgnore([
-                        'id' => (string) Str::uuid7(),
-                        'country_code' => $country,
-                        'method' => $method->value,
-                        'provider_id' => $providers[$code],
-                        'currency_code' => $currency,
-                        'is_enabled' => true,
-                        'created_at' => $now,
-                        'updated_at' => $now,
+                        'id' => (string) Str::uuid7(), 'country_code' => $country, 'method' => $method->value,
+                        'provider_id' => $providers[$network], 'currency_code' => $currency, 'is_enabled' => true,
+                        'created_at' => $now, 'updated_at' => $now,
                     ]);
                 }
             }
-        }
-
-        // Paiement depuis le wallet Cashop, dans les pays d'envoi de test.
-        foreach ([['FR', 'EUR'], ['BE', 'EUR'], ['GB', 'GBP'], ['US', 'USD'], ['CM', 'XAF']] as [$country, $currency]) {
-            DB::table('country_payment_methods')->insertOrIgnore([
-                'id' => (string) Str::uuid7(),
-                'country_code' => $country,
-                'method' => PaymentMethod::Wallet->value,
-                'provider_id' => null,
-                'currency_code' => $currency,
-                'is_enabled' => true,
-                'created_at' => $now,
-                'updated_at' => $now,
-            ]);
         }
     }
 }

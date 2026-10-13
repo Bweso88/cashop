@@ -53,15 +53,6 @@ class ConstraintsTest extends TestCase
     }
 
     #[Test]
-    public function un_solde_de_wallet_ne_peut_pas_etre_negatif(): void
-    {
-        $this->assertRejected(
-            fn () => DB::table('wallet_balances')->limit(1)->update(['available' => -1]),
-            'wallet_balances_non_negative',
-        );
-    }
-
-    #[Test]
     public function un_remboursement_ne_peut_pas_etre_approuve_par_son_demandeur(): void
     {
         $this->assertRejected(function () {
@@ -106,15 +97,17 @@ class ConstraintsTest extends TestCase
     }
 
     #[Test]
-    public function un_meme_webhook_n_est_enregistre_qu_une_fois(): void
+    public function un_meme_webhook_authentifie_n_est_enregistre_qu_une_fois(): void
     {
         $providerId = DB::table('providers')->where('code', 'mtn_momo')->value('id');
-        $row = fn () => [
-            'id' => (string) Str::uuid7(), 'provider_id' => $providerId, 'received_at' => now(),
+        $row = fn (bool $valid) => [
+            'id' => (string) Str::uuid7(), 'provider_id' => $providerId, 'received_at' => now(), 'signature_valid' => $valid,
             'headers' => '{}', 'payload' => '{"a":1}', 'payload_sha256' => hash('sha256', '{"a":1}'),
         ];
-        DB::table('webhooks')->insert($row());
+        // Une copie falsifiée (rejetée) reçue en premier ne bloque pas la notification légitime.
+        DB::table('webhooks')->insert($row(false));
+        DB::table('webhooks')->insert($row(true));
 
-        $this->assertRejected(fn () => DB::table('webhooks')->insert($row()), 'webhooks_provider_id_payload_sha256_unique');
+        $this->assertRejected(fn () => DB::table('webhooks')->insert($row(true)), 'webhooks_provider_payload_unique');
     }
 }

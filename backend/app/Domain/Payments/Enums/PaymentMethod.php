@@ -8,7 +8,6 @@ enum PaymentMethod: string
 {
     use HasValues;
 
-    case Wallet = 'wallet';
     case Card = 'card';
     case MobileMoney = 'mobile_money';
     case BankAccount = 'bank_account';

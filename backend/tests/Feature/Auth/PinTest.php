@@ -12,6 +12,8 @@ class PinTest extends AuthTestCase
     #[Test]
     public function definir_puis_changer_le_pin(): void
     {
+        // Le client de démo a un PIN prédéfini : on repart d'un compte sans PIN.
+        User::where('email', 'client@cashop.test')->update(['transaction_pin_hash' => null]);
         $headers = ['Authorization' => 'Bearer '.$this->tokenFor('client@cashop.test')];
 
         $this->putJson('/api/v1/auth/pin', ['pin' => '123456'], $headers)->assertStatus(422)->assertJsonValidationErrors(['pin']);
@@ -31,6 +33,7 @@ class PinTest extends AuthTestCase
     {
         config(['cashop.pin.max_attempts' => 3]);
         $user = User::where('email', 'client@cashop.test')->first();
+        $user->forceFill(['transaction_pin_hash' => null])->save();
         $pins = app(PinService::class);
         $pins->set($user, '482915', null);
 

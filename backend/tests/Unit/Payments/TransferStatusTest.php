@@ -2,63 +2,91 @@
 
 namespace Tests\Unit\Payments;
 
-use App\Domain\Payments\Enums\TransferStatus;
+use App\Domain\Payments\Enums\TransferStatus as S;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 
 class TransferStatusTest extends TestCase
 {
-    #[Test]
-    public function le_parcours_nominal_est_autorise(): void
+    private function assertPath(S ...$path): void
     {
-        $path = [
-            TransferStatus::Quoted, TransferStatus::AwaitingConfirmation, TransferStatus::Authorized,
-            TransferStatus::FundsReserved, TransferStatus::Submitted, TransferStatus::Pending,
-            TransferStatus::Processing, TransferStatus::Completed,
-        ];
-
         for ($i = 1; $i < count($path); $i++) {
-            $this->assertTrue($path[$i - 1]->canTransitionTo($path[$i]), "{$path[$i - 1]->value} -> {$path[$i]->value}");
+            $this->assertTrue($path[$i - 1]->canTransitionTo($path[$i]), "{$path[$i - 1]->value} → {$path[$i]->value}");
         }
     }
 
     #[Test]
-    public function un_echec_ne_peut_que_etre_extourne(): void
+    public function parcours_retrait_en_agence(): void
     {
-        $this->assertSame([TransferStatus::Reversed], TransferStatus::Failed->allowedTransitions());
-        $this->assertFalse(TransferStatus::Failed->canTransitionTo(TransferStatus::Completed));
+        $this->assertPath(S::Initiated, S::QuoteConfirmed, S::PaymentPending, S::PaymentConfirmed, S::TransferAvailableForPickup, S::PayoutConfirmed);
     }
 
     #[Test]
-    public function un_etat_inconnu_est_reconcilie_vers_l_etat_reel(): void
+    public function parcours_versement_sur_portefeuille(): void
     {
-        foreach ([TransferStatus::Pending, TransferStatus::Processing, TransferStatus::Completed, TransferStatus::Failed] as $next) {
-            $this->assertTrue(TransferStatus::Unknown->canTransitionTo($next));
+        $this->assertPath(S::Initiated, S::QuoteConfirmed, S::PaymentPending, S::PaymentConfirmed, S::TransferPending, S::TransferConfirmed, S::PayoutConfirmed);
+    }
+
+    #[Test]
+    public function un_paiement_refuse_echoue_sans_remboursement(): void
+    {
+        $this->assertTrue(S::PaymentPending->canTransitionTo(S::Failed));
+        $this->assertFalse(S::PaymentPending->canTransitionTo(S::RefundPending));
+    }
+
+    #[Test]
+    public function apres_paiement_confirme_seuls_livraison_ou_remboursement_sont_possibles(): void
+    {
+        // Des fonds ont été prélevés : l'échec « sec » est interdit, il faut rembourser.
+        $this->assertFalse(S::PaymentConfirmed->canTransitionTo(S::Failed));
+        $this->assertFalse(S::TransferPending->canTransitionTo(S::Failed));
+        $this->assertPath(S::PaymentConfirmed, S::RefundPending, S::Refunded);
+        $this->assertPath(S::TransferPending, S::RefundPending);
+    }
+
+    #[Test]
+    public function un_resultat_inconnu_passe_par_le_rapprochement(): void
+    {
+        foreach ([S::PaymentPending, S::PaymentConfirmed, S::TransferPending, S::RefundPending] as $status) {
+            $this->assertTrue($status->canTransitionTo(S::RequiresReconciliation), $status->value);
         }
-        $this->assertFalse(TransferStatus::Unknown->canTransitionTo(TransferStatus::Reversed));
+        // Le rapprochement ne peut pas « inventer » un succès sans passer par un état constaté.
+        $this->assertFalse(S::RequiresReconciliation->canTransitionTo(S::QuoteConfirmed));
     }
 
     #[Test]
-    public function les_etats_terminaux_n_ont_aucune_transition(): void
+    public function aucun_statut_ne_regresse(): void
     {
-        $terminal = array_filter(TransferStatus::cases(), fn (TransferStatus $s) => $s->isTerminal());
-
-        $this->assertEqualsCanonicalizing(
-            [TransferStatus::Reversed, TransferStatus::Refunded, TransferStatus::Expired, TransferStatus::RejectedKyc, TransferStatus::RejectedRisk],
-            array_values($terminal),
-        );
+        $this->assertFalse(S::TransferConfirmed->canTransitionTo(S::TransferPending));
+        $this->assertFalse(S::PayoutConfirmed->canTransitionTo(S::TransferConfirmed));
+        $this->assertFalse(S::PaymentConfirmed->canTransitionTo(S::PaymentPending));
     }
 
     #[Test]
-    public function tout_etat_non_terminal_est_atteignable(): void
+    public function etats_terminaux(): void
     {
-        $reachable = [TransferStatus::Quoted];
-        foreach (TransferStatus::cases() as $status) {
+        $terminal = array_values(array_filter(S::cases(), fn (S $s) => $s->isTerminal()));
+        $this->assertEqualsCanonicalizing([S::PayoutConfirmed, S::Failed, S::Cancelled, S::Refunded], $terminal);
+    }
+
+    #[Test]
+    public function tout_etat_est_atteignable(): void
+    {
+        $reachable = [S::Initiated];
+        foreach (S::cases() as $status) {
             array_push($reachable, ...$status->allowedTransitions());
         }
-
-        foreach (TransferStatus::cases() as $status) {
+        foreach (S::cases() as $status) {
             $this->assertContains($status, $reachable, "{$status->value} n'est jamais atteignable");
         }
+    }
+
+    #[Test]
+    public function les_etats_detenant_des_fonds_clients_sont_identifies(): void
+    {
+        $this->assertTrue(S::PaymentConfirmed->holdsCustomerFunds());
+        $this->assertTrue(S::RefundPending->holdsCustomerFunds());
+        $this->assertFalse(S::PaymentPending->holdsCustomerFunds());
+        $this->assertFalse(S::Refunded->holdsCustomerFunds());
     }
 }

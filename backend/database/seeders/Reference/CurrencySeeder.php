@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\DB;
 class CurrencySeeder extends Seeder
 {
     /**
-     * Décimales selon ISO 4217. Devises des wallets (actives) : XAF, EUR, USD, GBP.
+     * Décimales selon ISO 4217. Devises utilisables (actives) : XAF (Congo), EUR, USD, GBP, XOF.
      * Les autres servent de devise par défaut à des pays référencés et restent inactives.
      */
     public const CURRENCIES = [
@@ -16,7 +16,7 @@ class CurrencySeeder extends Seeder
         ['code' => 'EUR', 'name' => 'Euro', 'minor_units' => 2, 'is_active' => true],
         ['code' => 'USD', 'name' => 'Dollar américain', 'minor_units' => 2, 'is_active' => true],
         ['code' => 'GBP', 'name' => 'Livre sterling', 'minor_units' => 2, 'is_active' => true],
-        ['code' => 'XOF', 'name' => 'Franc CFA (BCEAO)', 'minor_units' => 0, 'is_active' => false],
+        ['code' => 'XOF', 'name' => 'Franc CFA (BCEAO)', 'minor_units' => 0, 'is_active' => true],
         ['code' => 'CDF', 'name' => 'Franc congolais', 'minor_units' => 2, 'is_active' => false],
     ];
 

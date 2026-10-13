@@ -42,6 +42,33 @@ return [
         'challenge_ttl_seconds' => 120,
     ],
 
+    'transfers' => [
+        // Durée de validité d'un devis.
+        'quote_ttl_minutes' => (int) env('QUOTE_TTL_MINUTES', 15),
+        // Sans confirmation de l'opérateur passé ce délai, le paiement est vérifié par rapprochement.
+        'payment_timeout_minutes' => (int) env('PAYMENT_TIMEOUT_MINUTES', 10),
+        // Un rapprochement non résolu passé ce délai est escaladé à l'équipe opérations.
+        'reconciliation_escalation_hours' => (int) env('RECONCILIATION_ESCALATION_HOURS', 24),
+    ],
+
+    'environments' => [
+        // Production désactivée par défaut : activation explicite après validation des prérequis.
+        'production_enabled' => filter_var(env('CASHOP_PRODUCTION_ENABLED', false), FILTER_VALIDATE_BOOL),
+    ],
+
+    'simulation' => [
+        // Délai avant que le connecteur simulé ne confirme (validation « sur le téléphone »).
+        'delay_seconds' => (int) env('SIMULATION_DELAY_SECONDS', 4),
+        // Secret HMAC des notifications simulées.
+        'webhook_secret' => env('WEBHOOK_SIGNING_SECRET', ''),
+    ],
+
+    // Connecteurs officiels : code prestataire => classe. Vide tant que la documentation et les
+    // accès partenaires n'ont pas été obtenus (aucune intégration n'est inventée).
+    'connectors' => [
+        'official' => [],
+    ],
+
     // Rôles du personnel : MFA obligatoire, jetons courts, accès à /api/admin/v1.
     'staff_roles' => ['support', 'compliance', 'finance', 'admin', 'super_admin'],
 ];

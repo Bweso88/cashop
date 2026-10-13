@@ -4,7 +4,9 @@
 > documentation officielle. Toute information absente est marquée
 > **NOT CONFIRMED — PROVIDER DOCUMENTATION REQUIRED** et remplacée par un `Mock<Provider>`.
 >
-> Tous les providers sont en mode `mock` jusqu'à la phase 14 (voir [INTEGRATION-GUIDE.md](INTEGRATION-GUIDE.md)).
+> Tous les prestataires sont en mode `mock` (connecteurs **simulés**, aucun mouvement de fonds réel). Aucun
+> connecteur officiel n'existe encore : il sera écrit à réception de la documentation et des accès partenaires
+> (voir [INTEGRATION-GUIDE.md](INTEGRATION-GUIDE.md)).
 
 ## Niveaux de confiance utilisés
 
@@ -20,18 +22,18 @@ l'environnement de développement ; les points ci-dessous viennent de résultats
 
 ## Matrice des capacités (état actuel)
 
-| Capacité | Visa Direct | MoneyGram | Western Union | MTN MoMo | Airtel Money |
-|---|---|---|---|---|---|
-| Quote | NOT CONFIRMED | OFFICIEL | NOT CONFIRMED¹ | N/A (pas de quote documentée) — NOT CONFIRMED | NOT CONFIRMED |
-| Create / Update | PUBLIC-SECONDAIRE (push funds) | OFFICIEL (update) | NOT CONFIRMED¹ | PUBLIC-SECONDAIRE | PUBLIC-SECONDAIRE |
-| Commit | N/A | OFFICIEL | NOT CONFIRMED | N/A | N/A |
-| Status | NOT CONFIRMED | NOT CONFIRMED | NOT CONFIRMED | PUBLIC-SECONDAIRE | PUBLIC-SECONDAIRE |
-| Cancel | NOT CONFIRMED | NOT CONFIRMED | NOT CONFIRMED | NOT CONFIRMED | NOT CONFIRMED |
-| Refund | NOT CONFIRMED | NOT CONFIRMED | NOT CONFIRMED | NOT CONFIRMED | NOT CONFIRMED |
-| Webhooks / callbacks | NOT CONFIRMED | NOT CONFIRMED | NOT CONFIRMED | PUBLIC-SECONDAIRE (callbacks) | PUBLIC-SECONDAIRE (callbacks) |
-| Signature des webhooks | NOT CONFIRMED | NOT CONFIRMED | NOT CONFIRMED | NOT CONFIRMED | NOT CONFIRMED |
-| Collection (encaissement) | NOT CONFIRMED (AFT) | N/A | N/A | PUBLIC-SECONDAIRE | PUBLIC-SECONDAIRE |
-| Pays / devises / plafonds / tarifs | NOT CONFIRMED | NOT CONFIRMED | NOT CONFIRMED | NOT CONFIRMED | NOT CONFIRMED |
+| Capacité | Visa Direct | MoneyGram | Western Union | Ria | MTN MoMo | Airtel Money |
+|---|---|---|---|---|---|---|
+| Quote | NOT CONFIRMED | OFFICIEL | NOT CONFIRMED¹ | NOT CONFIRMED | N/A (pas de quote documentée) — NOT CONFIRMED | NOT CONFIRMED |
+| Create / Update | PUBLIC-SECONDAIRE (push funds) | OFFICIEL (update) | NOT CONFIRMED¹ | NOT CONFIRMED | PUBLIC-SECONDAIRE | PUBLIC-SECONDAIRE |
+| Commit | N/A | OFFICIEL | NOT CONFIRMED | NOT CONFIRMED | N/A | N/A |
+| Status | NOT CONFIRMED | NOT CONFIRMED | NOT CONFIRMED | NOT CONFIRMED | PUBLIC-SECONDAIRE | PUBLIC-SECONDAIRE |
+| Cancel | NOT CONFIRMED | NOT CONFIRMED | NOT CONFIRMED | NOT CONFIRMED | NOT CONFIRMED | NOT CONFIRMED |
+| Refund | NOT CONFIRMED | NOT CONFIRMED | NOT CONFIRMED | NOT CONFIRMED | NOT CONFIRMED | NOT CONFIRMED |
+| Webhooks / callbacks | NOT CONFIRMED | NOT CONFIRMED | NOT CONFIRMED | NOT CONFIRMED | PUBLIC-SECONDAIRE (callbacks) | PUBLIC-SECONDAIRE (callbacks) |
+| Signature des webhooks | NOT CONFIRMED | NOT CONFIRMED | NOT CONFIRMED | NOT CONFIRMED | NOT CONFIRMED | NOT CONFIRMED |
+| Collection (encaissement) | NOT CONFIRMED (AFT) | N/A | N/A | N/A | PUBLIC-SECONDAIRE | PUBLIC-SECONDAIRE |
+| Pays / devises / plafonds / tarifs | NOT CONFIRMED | NOT CONFIRMED | NOT CONFIRMED | NOT CONFIRMED | NOT CONFIRMED | NOT CONFIRMED |
 
 ¹ Western Union décrit une « Partner Money Transfer API » (estimation de frais, validation, création de
 transaction) mais le contrat technique n'est fourni qu'après onboarding partenaire.
@@ -98,6 +100,18 @@ Classes prévues : `WesternUnionClient`, `WesternUnionProvider`, `WesternUnionWe
 technique ; modèle d'authentification et certificats (mTLS) ; verrouillage du taux FX et durée de validité ;
 création, statut, annulation ; gestion du MTCN ; webhooks ; règlement ; corridors ; plafonds ; certification.
 
+## Ria Money Transfer
+
+| Élément | Information | Niveau |
+|---|---|---|
+| Programme partenaire, API, authentification | — | NOT CONFIRMED |
+| Corridors depuis le Congo-Brazzaville, devises, plafonds, frais | — | NOT CONFIRMED |
+| Statuts, annulation, remboursement, notifications | — | NOT CONFIRMED |
+
+Aucune information technique n'a été vérifiée. En démonstration, Ria est servi par le connecteur simulé
+(`SimulatedRemittanceConnector`, frais fictifs). **À obtenir auprès de Ria :** éligibilité de Cashop comme
+partenaire ou sous-agent au Congo ; documentation API ; environnement de test ; certification ; règlement.
+
 ## MTN Mobile Money
 
 | Élément | Information | Niveau |
@@ -134,12 +148,35 @@ Classes prévues : `AirtelMoneyClient` (configuration **par pays**), `AirtelMone
 et/ou signature des messages ; liste blanche d'IP ; callbacks ; plafonds, frais, devises ; KYC exigé pour
 la production ; règlement.
 
-## Ajouter un provider (Orange Money, Wave, banques…)
+## Architecture des connecteurs (implémentée)
 
-1. Créer `app/Providers/Payment/<Nom>/` avec Client, Authenticator, Mapper, Provider, WebhookHandler.
-2. Créer `Mock<Nom>Provider`.
-3. Ajouter les lignes `providers`, `provider_capabilities` (avec `confirmation_status`), `provider_country_configs`.
-4. Aucune modification de l'orchestrateur, des controllers ou des apps clientes.
+```
+backend/app/Domain/Providers/Connectors/
+├── Contracts/   Connector · WalletConnector (collect, disburse, statuts) · RemittanceConnector
+│                (quote, requiredFields, validate, createTransfer idempotent, transferStatus, cancel)
+├── DTO/         requêtes et résultats normalisés (ConnectorResult, RemittanceOrder…)
+├── Simulated/   connecteurs simulés : références SIM-…, scénarios de démonstration, webhooks HMAC
+└── ConnectorRegistry   choisit le connecteur selon l'environnement du prestataire
+```
+
+Chaque connecteur déclare ses `ConnectorCapability` ; l'orchestrateur ne connaît que les contrats.
+
+| Environnement du prestataire | Connecteur utilisé |
+|---|---|
+| `mock` (démonstration) | simulé — aucun fonds réel |
+| `sandbox` | officiel uniquement (`config/cashop.php` → `connectors.official.<code>`) ; **aucun n'existe** : refus `PROVIDER_UNAVAILABLE` |
+| `production` | officiel + `CASHOP_PRODUCTION_ENABLED=true` ; **désactivé par défaut** |
+
+Un transfert garde l'environnement de sa création ; il n'est jamais traité par un connecteur d'un autre
+environnement (pas de bascule automatique de la simulation vers le réel).
+
+## Ajouter un connecteur officiel (Orange Money, Wave, banques…)
+
+1. Obtenir la documentation, le contrat et les accès sandbox du prestataire.
+2. Écrire `Connectors/<Nom>/<Nom>Connector` qui implémente le contrat adapté, avec ses tests sur la sandbox.
+3. Le déclarer dans `cashop.connectors.official`, ajouter les lignes `providers`, `provider_capabilities`
+   (`confirmation_status`) et `provider_country_configs`.
+4. Aucune modification de l'orchestrateur, des contrôleurs ni des applications clientes.
 
 ## Sources
 

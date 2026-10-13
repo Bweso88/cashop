@@ -6,6 +6,7 @@ use App\Domain\Providers\Enums\ConfirmationStatus;
 use App\Domain\Providers\Enums\ProviderCapability;
 use App\Domain\Providers\Enums\ProviderDirection;
 use App\Domain\Providers\Enums\ProviderHealthStatus;
+use App\Domain\Providers\Enums\ProviderKind;
 use App\Domain\Providers\Enums\ProviderMode;
 use App\Support\Database\Check;
 use Illuminate\Database\Migrations\Migration;
@@ -21,14 +22,14 @@ return new class extends Migration
             $table->uuid('id')->primary();
             $table->string('code', 40)->unique();
             $table->string('name');
-            $table->string('adapter_class')->nullable();
-            $table->string('mock_adapter_class')->nullable();
+            $table->string('kind', 12);
             $table->string('mode', 12)->default(ProviderMode::Mock->value);
             $table->boolean('is_enabled')->default(false);
             $table->string('health_status', 12)->default(ProviderHealthStatus::Unknown->value);
             $table->timestampTz('health_checked_at')->nullable();
             $table->timestampsTz();
         });
+        Check::enum('providers', 'kind', ProviderKind::class);
         Check::enum('providers', 'mode', ProviderMode::class);
         Check::enum('providers', 'health_status', ProviderHealthStatus::class);
 

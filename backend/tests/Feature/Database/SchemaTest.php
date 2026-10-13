@@ -14,9 +14,9 @@ class SchemaTest extends TestCase
     /** Tables exigées par le cahier des charges (docs/DATABASE.md). */
     private const REQUIRED_TABLES = [
         'users', 'user_profiles', 'kyc_profiles', 'kyc_documents', 'kyc_verifications',
-        'wallets', 'wallet_balances', 'wallet_transactions',
         'ledger_accounts', 'ledger_transactions', 'ledger_entries',
         'beneficiaries', 'transfers', 'transfer_quotes', 'transfer_events', 'provider_transactions',
+        'payment_attempts', 'receipts', 'reconciliation_records',
         'providers', 'provider_capabilities', 'provider_country_configs',
         'countries', 'currencies', 'country_payment_methods', 'country_payout_methods',
         'fees', 'fx_rates', 'refunds', 'disputes', 'webhooks',
@@ -29,6 +29,15 @@ class SchemaTest extends TestCase
     {
         foreach (self::REQUIRED_TABLES as $table) {
             $this->assertTrue(Schema::hasTable($table), "Table manquante : {$table}");
+        }
+    }
+
+    #[Test]
+    public function aucun_portefeuille_client_n_existe(): void
+    {
+        // ADR 0004 : Cashop orchestre des paiements, il ne détient pas de fonds clients.
+        foreach (['wallets', 'wallet_balances', 'wallet_transactions'] as $table) {
+            $this->assertFalse(Schema::hasTable($table), "Table interdite : {$table}");
         }
     }
 

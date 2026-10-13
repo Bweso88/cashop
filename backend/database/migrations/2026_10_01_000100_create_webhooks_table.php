@@ -27,13 +27,16 @@ return new class extends Migration
             $table->text('error')->nullable();
             $table->string('source_ip', 45)->nullable();
 
-            // Anti-rejeu : un même événement ou un même payload n'est traité qu'une fois.
-            $table->unique(['provider_id', 'payload_sha256']);
             $table->index(['status', 'received_at']);
+            $table->index(['provider_id', 'payload_sha256']);
         });
         Check::enum('webhooks', 'status', WebhookStatus::class);
+        // Anti-rejeu : un même événement ou un même contenu authentifié n'est traité qu'une fois.
+        // Les notifications rejetées (signature invalide) n'entrent pas dans l'unicité : sinon une
+        // copie falsifiée envoyée en premier ferait ignorer la notification légitime.
+        DB::statement('CREATE UNIQUE INDEX webhooks_provider_payload_unique ON webhooks (provider_id, payload_sha256) WHERE signature_valid');
         DB::statement(
-            'CREATE UNIQUE INDEX webhooks_provider_event_unique ON webhooks (provider_id, provider_event_id) WHERE provider_event_id IS NOT NULL'
+            'CREATE UNIQUE INDEX webhooks_provider_event_unique ON webhooks (provider_id, provider_event_id) WHERE signature_valid AND provider_event_id IS NOT NULL'
         );
     }
 

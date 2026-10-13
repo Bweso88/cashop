@@ -4,6 +4,7 @@ namespace Database\Seeders\Reference;
 
 use App\Domain\Providers\Enums\ConfirmationStatus;
 use App\Domain\Providers\Enums\ProviderCapability;
+use App\Domain\Providers\Enums\ProviderKind;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -21,12 +22,17 @@ class ProviderSeeder extends Seeder
 
     private const MONEYGRAM_UPDATE = 'https://developer.moneygram.com/moneygram-developer/docs/update-a-transaction';
 
+    /**
+     * Connecteurs : la classe officielle n'est implémentée qu'une fois la documentation partenaire
+     * obtenue ; d'ici là seul le connecteur simulé est utilisable (environnement « mock »).
+     */
     public const PROVIDERS = [
-        'visa_direct' => ['name' => 'Visa Direct', 'class' => 'VisaDirect\\VisaDirectProvider', 'mock' => 'Mock\\MockVisaProvider'],
-        'moneygram' => ['name' => 'MoneyGram', 'class' => 'MoneyGram\\MoneyGramProvider', 'mock' => 'Mock\\MockMoneyGramProvider'],
-        'western_union' => ['name' => 'Western Union', 'class' => 'WesternUnion\\WesternUnionProvider', 'mock' => 'Mock\\MockWesternUnionProvider'],
-        'mtn_momo' => ['name' => 'MTN Mobile Money', 'class' => 'MtnMoMo\\MtnMoMoProvider', 'mock' => 'Mock\\MockMtnProvider'],
-        'airtel_money' => ['name' => 'Airtel Money', 'class' => 'AirtelMoney\\AirtelMoneyProvider', 'mock' => 'Mock\\MockAirtelProvider'],
+        'mtn_momo' => ['name' => 'MTN Mobile Money', 'kind' => ProviderKind::Wallet],
+        'airtel_money' => ['name' => 'Airtel Money', 'kind' => ProviderKind::Wallet],
+        'western_union' => ['name' => 'Western Union', 'kind' => ProviderKind::Remittance],
+        'moneygram' => ['name' => 'MoneyGram', 'kind' => ProviderKind::Remittance],
+        'ria' => ['name' => 'Ria Money Transfer', 'kind' => ProviderKind::Remittance],
+        'visa_direct' => ['name' => 'Visa Direct', 'kind' => ProviderKind::Card],
     ];
 
     /**
@@ -75,18 +81,16 @@ class ProviderSeeder extends Seeder
     public function run(): void
     {
         $now = now();
-        $namespace = 'App\\Providers\\Payment\\';
 
         foreach (self::PROVIDERS as $code => $p) {
             DB::table('providers')->upsert([[
                 'id' => (string) Str::uuid7(),
                 'code' => $code,
                 'name' => $p['name'],
-                'adapter_class' => $namespace.$p['class'],
-                'mock_adapter_class' => $namespace.$p['mock'],
+                'kind' => $p['kind']->value,
                 'created_at' => $now,
                 'updated_at' => $now,
-            ]], ['code'], ['name', 'adapter_class', 'mock_adapter_class', 'updated_at']);
+            ]], ['code'], ['name', 'kind', 'updated_at']);
             // mode, is_enabled et health_status sont des réglages d'exploitation : jamais écrasés.
 
             $providerId = DB::table('providers')->where('code', $code)->value('id');

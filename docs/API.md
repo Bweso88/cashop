@@ -30,17 +30,17 @@ Base : `/api/v1` (clients) et `/api/admin/v1` (back-office : personnel, MFA obli
 | POST | `/auth/device/key` | Clé publique biométrique de l'appareil | — |
 | POST | `/auth/device/challenge` | Challenge à signer | — |
 | GET | `/profile` | Profil | — |
-| GET | `/wallet` | Portefeuilles et soldes | — |
-| GET | `/wallet/transactions` | Historique | — |
-| POST | `/transfers/quote` | Comparaison des offres | — |
-| POST | `/transfers` | Création et exécution | **Oui** |
-| GET | `/transfers/{id}` | Détail + timeline | — |
-| POST | `/transfers/{id}/cancel` | Annulation | **Oui** |
-| POST | `/transfers/{id}/refund` | Demande de remboursement | **Oui** |
-| GET/POST | `/beneficiaries` | Bénéficiaires | — |
-| GET | `/kyc` · POST `/kyc/documents` | KYC | — |
-| GET | `/providers` | Providers actifs | — |
-| GET | `/providers/{provider}/capabilities` | Capacités | — |
+| GET | `/catalog/funding-providers` | Portefeuilles Mobile Money de paiement (MTN, Airtel) | — |
+| GET | `/catalog/networks` | Réseaux (WU, MoneyGram, Ria) et destinations | — |
+| GET | `/catalog/networks/{network}/fields` | Champs bénéficiaire exigés pour un corridor | — |
+| GET | `/catalog/simulation-scenarios` | Scénarios de démonstration (vide hors simulation) | — |
+| POST | `/transfers/quote` | Devis : frais détaillés, taux, montant reçu, expiration | — |
+| POST | `/transfers` | Confirmation (PIN Cashop) et demande de débit Mobile Money | **Oui** |
+| GET | `/transfers` | Historique (`state`, `q`) | — |
+| GET | `/transfers/{id}` | Détail + chronologie | — |
+| POST | `/transfers/{id}/refresh` | Relire le statut auprès des prestataires | — |
+| GET | `/transfers/{id}/receipt` | Reçus (transfert livré, remboursement) | — |
+| GET/POST/PUT/DELETE | `/beneficiaries` | Bénéficiaires | — |
 | POST | `/webhooks/{provider}` | Notifications providers | (anti-rejeu interne) |
 
 ## Codes d'erreur métier
@@ -56,24 +56,32 @@ Base : `/api/v1` (clients) et `/api/admin/v1` (back-office : personnel, MFA obli
 | `MFA_REQUIRED` / `STAFF_ONLY` | 403 | Accès back-office |
 | `TOO_MANY_REQUESTS` | 429 | Limite de débit (en-tête `Retry-After`) |
 | `KYC_REQUIRED` | 403 | Niveau KYC insuffisant |
+| `LIMITS_NOT_CONFIGURED` | 403 | Aucun plafond défini pour le niveau KYC (envoi refusé par prudence) |
+| `LIMIT_EXCEEDED` | 422 | Plafond par opération, jour ou mois dépassé |
+| `CORRIDOR_UNAVAILABLE` | 422 | Réseau, pays ou mode de retrait non proposé |
+| `ENVIRONMENT_MISMATCH` | 422 | Portefeuille et réseau dans des environnements différents |
+| `QUOTE_EXPIRED` | 409 | Devis expiré ou déjà utilisé |
+| `RECEIPT_NOT_AVAILABLE` | 409 | Ni livré ni remboursé |
+| `PROVIDER_UNAVAILABLE` | 503 | Connecteur absent ou environnement désactivé |
+| `INVALID_WEBHOOK` | 401 | Signature ou horodatage de notification invalide |
 | `RISK_REVIEW` / `RISK_BLOCKED` | 403 | Décision du moteur de risque |
 | `STEP_UP_REQUIRED` | 403 | OTP supplémentaire exigé |
-| `LIMIT_EXCEEDED` | 422 | Plafond atteint |
-| `INSUFFICIENT_FUNDS` | 422 | Solde insuffisant |
-| `QUOTE_EXPIRED` | 409 | Quote expirée |
 | `INVALID_STATE` | 409 | Opération incompatible avec le statut |
 | `IDEMPOTENCY_CONFLICT` | 409 | Clé réutilisée avec un autre corps |
 | `REQUEST_IN_PROGRESS` | 409 | Requête identique en cours |
-| `PROVIDER_UNAVAILABLE` | 503 | Aucun provider disponible pour le corridor |
 
 ## Exemple de parcours
 
 ```
-POST /transfers/quote          → quotes[] (id, provider, frais, taux, total, expires_at)
-POST /transfers                → 201 { status: "FUNDS_RESERVED" | "SUBMITTED", ... }
-  Idempotency-Key: 0b8f…       (même clé en cas de nouvel essai réseau)
-GET  /transfers/{id}           → statut + timeline, jusqu'à COMPLETED / FAILED
+GET  /catalog/networks                     → réseaux, pays, modes de retrait
+POST /transfers/quote                      → 201 devis (frais, taux, reçu, expires_at)
+POST /transfers   Idempotency-Key: 0b8f…   → 201 { status: "PAYMENT_PENDING" }
+     (le client valide le débit sur son téléphone, auprès de son opérateur)
+POST /transfers/{id}/refresh               → PAYMENT_CONFIRMED → TRANSFER_AVAILABLE_FOR_PICKUP
+GET  /transfers/{id}/receipt               → reçu (mention « SIMULATION » en démonstration)
 ```
+
+Cycle de vie complet : [TRANSFER-STATES.md](TRANSFER-STATES.md).
 
 ## Génération des clients
 

@@ -1,8 +1,12 @@
 <?php
 
 use App\Http\Controllers\Api\V1\AuthController;
+use App\Http\Controllers\Api\V1\BeneficiaryController;
+use App\Http\Controllers\Api\V1\CatalogController;
 use App\Http\Controllers\Api\V1\ProfileController;
 use App\Http\Controllers\Api\V1\SecurityController;
+use App\Http\Controllers\Api\V1\TransferController;
+use App\Http\Controllers\Api\V1\WebhookController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -26,5 +30,22 @@ Route::prefix('v1')->group(function () {
         Route::post('auth/device/challenge', [SecurityController::class, 'deviceChallenge']);
 
         Route::get('profile', [ProfileController::class, 'show']);
+
+        Route::get('catalog/funding-providers', [CatalogController::class, 'fundingProviders']);
+        Route::get('catalog/networks', [CatalogController::class, 'networks']);
+        Route::get('catalog/networks/{network}/fields', [CatalogController::class, 'fields']);
+        Route::get('catalog/simulation-scenarios', [CatalogController::class, 'scenarios']);
+
+        Route::apiResource('beneficiaries', BeneficiaryController::class);
+
+        Route::post('transfers/quote', [TransferController::class, 'quote']);
+        Route::post('transfers', [TransferController::class, 'store'])->middleware('throttle:sensitive');
+        Route::get('transfers', [TransferController::class, 'index']);
+        Route::get('transfers/{id}', [TransferController::class, 'show']);
+        Route::post('transfers/{id}/refresh', [TransferController::class, 'refresh']);
+        Route::get('transfers/{id}/receipt', [TransferController::class, 'receipt']);
     });
+
+    // Notifications des prestataires : authentifiées par leur propre mécanisme (pas de jeton Cashop).
+    Route::post('webhooks/{provider}', WebhookController::class)->middleware('throttle:webhooks');
 });

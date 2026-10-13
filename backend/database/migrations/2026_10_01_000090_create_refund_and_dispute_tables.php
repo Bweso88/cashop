@@ -18,9 +18,11 @@ return new class extends Migration
             $table->char('currency_code', 3);
             $table->text('reason');
             $table->string('status', 12)->default(RefundStatus::Requested->value);
-            $table->foreignUuid('requested_by')->constrained('users');
+            // NULL = remboursement déclenché par le système (échec confirmé après paiement).
+            $table->foreignUuid('requested_by')->nullable()->constrained('users');
             $table->foreignUuid('approved_by')->nullable()->constrained('users');
             $table->string('provider_reference')->nullable();
+            $table->foreignUuid('payment_attempt_id')->nullable()->constrained(); // versement de restitution
             $table->foreignUuid('ledger_transaction_id')->nullable()->constrained();
             $table->string('idempotency_key', 100);
             $table->timestampsTz();

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Cashop API
-  version: 0.2.0
+  version: 0.3.0
   summary: API REST de la plateforme de transferts Cashop (mobile et web).
   license:
     name: Propriétaire — tous droits réservés
@@ -21,8 +21,8 @@ tags:
     description: "Inscription, connexion, OTP, PIN"
   - name: Profile
     description: "Profil utilisateur"
-  - name: Wallet
-    description: "Portefeuilles et mouvements"
+  - name: Catalog
+    description: "Portefeuilles de paiement, réseaux, corridors, scénarios de simulation"
   - name: Transfers
     description: "Quotes et transferts"
   - name: Beneficiaries
@@ -260,91 +260,127 @@ paths:
               schema: { $ref: '#/components/schemas/Profile' }
         '401': { $ref: '#/components/responses/Unauthorized' }
 
-  /wallet:
+  /catalog/funding-providers:
     get:
-      operationId: getWallet
-      tags: [Wallet]
-      summary: Portefeuilles et soldes
+      operationId: listFundingProviders
+      tags: [Catalog]
+      summary: Portefeuilles Mobile Money utilisables pour payer (MTN MoMo, Airtel Money au Congo)
       responses:
         '200':
-          description: Portefeuilles
+          description: Liste
           content:
             application/json:
               schema:
                 type: object
                 properties:
-                  total_balance: { $ref: '#/components/schemas/Money' }
-                  wallets:
-                    type: array
-                    items: { $ref: '#/components/schemas/Wallet' }
-        '401': { $ref: '#/components/responses/Unauthorized' }
-  /wallet/transactions:
+                  data: { type: array, items: { $ref: '#/components/schemas/ProviderSummary' } }
+
+  /catalog/networks:
     get:
-      operationId: listWalletTransactions
-      tags: [Wallet]
-      summary: Historique des mouvements
+      operationId: listNetworks
+      tags: [Catalog]
+      summary: Réseaux de transfert actifs et leurs destinations
+      responses:
+        '200':
+          description: Liste
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/Network' } }
+
+  /catalog/networks/{network}/fields:
+    get:
+      operationId: networkFields
+      tags: [Catalog]
+      summary: Informations bénéficiaire exigées par le réseau pour un corridor
+      description: En simulation, les champs portent `source = SIMULATION` (exigences réelles NOT CONFIRMED).
       parameters:
-        - { $ref: '#/components/parameters/Cursor' }
-        - { $ref: '#/components/parameters/PerPage' }
-        - name: currency
-          in: query
-          schema: { $ref: '#/components/schemas/CurrencyCode' }
-        - name: type
-          in: query
-          schema: { $ref: '#/components/schemas/WalletTransactionType' }
+        - { name: network, in: path, required: true, schema: { $ref: '#/components/schemas/ProviderCode' } }
+        - { name: country, in: query, required: true, schema: { $ref: '#/components/schemas/CountryCode' } }
+        - { name: payout_method, in: query, required: true, schema: { $ref: '#/components/schemas/PayoutMethod' } }
       responses:
         '200':
-          description: Page de mouvements
+          description: Champs
           content:
             application/json:
               schema:
                 type: object
                 properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/FieldSpec' } }
+
+  /catalog/simulation-scenarios:
+    get:
+      operationId: listSimulationScenarios
+      tags: [Catalog]
+      summary: Scénarios de démonstration (vide hors environnement simulé)
+      responses:
+        '200':
+          description: Scénarios
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  enabled: { type: boolean }
                   data:
                     type: array
-                    items: { $ref: '#/components/schemas/WalletTransaction' }
-                  meta: { $ref: '#/components/schemas/CursorMeta' }
-        '401': { $ref: '#/components/responses/Unauthorized' }
+                    items:
+                      type: object
+                      properties:
+                        code: { $ref: '#/components/schemas/SimulationScenario' }
+                        label: { type: string }
+
   /transfers/quote:
     post:
-      operationId: quoteTransfer
+      operationId: createQuote
       tags: [Transfers]
-      summary: Comparer les offres des providers disponibles
-      description: |
-        L'orchestrateur interroge les providers capables de servir le corridor, applique frais et taux
-        Cashop, vérifie les limites et renvoie des quotes à durée de validité limitée.
+      summary: Devis (frais détaillés, taux, montant reçu, expiration)
       requestBody:
         required: true
         content:
           application/json:
             schema: { $ref: '#/components/schemas/QuoteRequest' }
       responses:
+        '201':
+          description: Devis
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Quote' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+        '503': { description: "Connecteur indisponible (PROVIDER_UNAVAILABLE) — par ex. production désactivée ou connecteur officiel absent" }
+
+  /transfers:
+    get:
+      operationId: listTransfers
+      tags: [Transfers]
+      summary: Historique (filtres état / recherche par référence ou bénéficiaire)
+      parameters:
+        - { name: state, in: query, schema: { type: string, enum: [in_progress, completed, failed] } }
+        - { name: q, in: query, schema: { type: string } }
+        - { name: page, in: query, schema: { type: integer } }
+      responses:
         '200':
-          description: Quotes disponibles (triées)
+          description: Page de transferts
           content:
             application/json:
               schema:
                 type: object
                 properties:
-                  quotes:
-                    type: array
-                    items: { $ref: '#/components/schemas/Quote' }
-                  unavailable_providers:
-                    type: array
-                    items:
-                      type: object
-                      properties:
-                        provider: { type: string }
-                        reason: { type: string }
-        '422': { $ref: '#/components/responses/ValidationError' }
-
-  /transfers:
+                  data: { type: array, items: { $ref: '#/components/schemas/Transfer' } }
+                  meta: { type: object }
     post:
       operationId: createTransfer
       tags: [Transfers]
-      summary: Créer et exécuter un transfert à partir d'une quote
+      summary: Confirmer le devis (PIN Cashop) et demander le débit Mobile Money
+      description: |
+        Le client valide le débit **sur son téléphone** auprès de son opérateur : Cashop ne demande jamais
+        le PIN Mobile Money. Le transfert international n'est soumis au réseau qu'**après** confirmation du
+        paiement. Un rejeu avec la même `Idempotency-Key` renvoie le même transfert (200) sans nouveau débit.
       parameters:
-        - { $ref: '#/components/parameters/IdempotencyKey' }
+        - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
         required: true
         content:
@@ -352,16 +388,12 @@ paths:
             schema: { $ref: '#/components/schemas/CreateTransferRequest' }
       responses:
         '201':
-          description: Transfert créé (statut initial, suivi asynchrone)
+          description: Transfert créé, débit demandé
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Transfer' }
-        '200':
-          description: Rejeu idempotent — réponse d'origine renvoyée à l'identique
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/Transfer' }
-        '403': { $ref: '#/components/responses/Forbidden' }
+        '200': { description: Rejeu idempotent }
+        '401': { description: PIN Cashop invalide (PIN_INVALID) }
         '409': { $ref: '#/components/responses/Conflict' }
         '422': { $ref: '#/components/responses/ValidationError' }
 
@@ -369,9 +401,9 @@ paths:
     get:
       operationId: getTransfer
       tags: [Transfers]
-      summary: Détail d'un transfert (avec timeline)
+      summary: Détail, statut et chronologie
       parameters:
-        - { $ref: '#/components/parameters/TransferId' }
+        - $ref: '#/components/parameters/TransferId'
       responses:
         '200':
           description: Transfert
@@ -380,69 +412,58 @@ paths:
               schema: { $ref: '#/components/schemas/Transfer' }
         '404': { $ref: '#/components/responses/NotFound' }
 
-  /transfers/{id}/cancel:
+  /transfers/{id}/refresh:
     post:
-      operationId: cancelTransfer
+      operationId: refreshTransfer
       tags: [Transfers]
-      summary: Demander l'annulation (si le provider et le statut le permettent)
+      summary: Relire le statut auprès des prestataires et faire avancer le transfert
       parameters:
-        - { $ref: '#/components/parameters/TransferId' }
-        - { $ref: '#/components/parameters/IdempotencyKey' }
+        - $ref: '#/components/parameters/TransferId'
       responses:
-        '202':
-          description: Annulation demandée
+        '200':
+          description: Transfert à jour
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Transfer' }
-        '409': { $ref: '#/components/responses/Conflict' }
-        '422': { $ref: '#/components/responses/ValidationError' }
+        '404': { $ref: '#/components/responses/NotFound' }
 
-  /transfers/{id}/refund:
-    post:
-      operationId: refundTransfer
-      tags: [Transfers]
-      summary: Demander un remboursement (soumis à validation)
-      parameters:
-        - { $ref: '#/components/parameters/TransferId' }
-        - { $ref: '#/components/parameters/IdempotencyKey' }
-      requestBody:
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [reason]
-              properties:
-                reason: { type: string, maxLength: 500 }
-                amount: { type: integer, minimum: 1, description: Remboursement partiel (unités mineures) }
-      responses:
-        '202':
-          description: Demande de remboursement enregistrée
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/Refund' }
-        '409': { $ref: '#/components/responses/Conflict' }
-
-  /beneficiaries:
+  /transfers/{id}/receipt:
     get:
-      operationId: listBeneficiaries
-      tags: [Beneficiaries]
-      summary: Liste des bénéficiaires
+      operationId: getReceipts
+      tags: [Transfers]
+      summary: Reçus émis (transfert livré et/ou remboursement)
+      parameters:
+        - $ref: '#/components/parameters/TransferId'
       responses:
         '200':
-          description: Bénéficiaires
+          description: Reçus
           content:
             application/json:
               schema:
                 type: object
                 properties:
-                  data:
-                    type: array
-                    items: { $ref: '#/components/schemas/Beneficiary' }
-        '401': { $ref: '#/components/responses/Unauthorized' }
+                  data: { type: array, items: { $ref: '#/components/schemas/Receipt' } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: Aucun reçu tant que le transfert n'est ni livré ni remboursé (RECEIPT_NOT_AVAILABLE) }
+
+  /beneficiaries:
+    get:
+      operationId: listBeneficiaries
+      tags: [Beneficiaries]
+      summary: Bénéficiaires enregistrés
+      responses:
+        '200':
+          description: Liste
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/Beneficiary' } }
     post:
       operationId: createBeneficiary
       tags: [Beneficiaries]
-      summary: Ajouter un bénéficiaire
+      summary: Ajouter un bénéficiaire (un doublon renvoie l'existant, 200)
       requestBody:
         required: true
         content:
@@ -454,7 +475,47 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Beneficiary' }
-        '401': { $ref: '#/components/responses/Unauthorized' }
+        '200': { description: Doublon — bénéficiaire existant }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /beneficiaries/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      operationId: getBeneficiary
+      tags: [Beneficiaries]
+      summary: Détail
+      responses:
+        '200':
+          description: Bénéficiaire
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Beneficiary' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      operationId: updateBeneficiary
+      tags: [Beneficiaries]
+      summary: Modifier
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BeneficiaryInput' }
+      responses:
+        '200':
+          description: Bénéficiaire
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Beneficiary' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      operationId: deleteBeneficiary
+      tags: [Beneficiaries]
+      summary: Supprimer (suppression logique)
+      responses:
+        '204': { description: Supprimé }
+        '404': { $ref: '#/components/responses/NotFound' }
+
   /kyc:
     get:
       operationId: getKyc
@@ -544,12 +605,13 @@ paths:
             schema: { type: object, additionalProperties: true }
       responses:
         '200':
-          description: Reçu (y compris doublon déjà traité)
+          description: "Reçu (`status: received`) ou doublon déjà traité (`status: duplicate`)"
           content:
             application/json:
               schema:
                 type: object
                 properties:
+                  status: { type: string, enum: [received, duplicate] }
                   event_id: { type: string, format: uuid }
         '401': { description: Signature ou jeton invalide }
 
@@ -624,7 +686,7 @@ components:
       properties:
         code:
           type: string
-          examples: [VALIDATION_ERROR, UNAUTHENTICATED, INVALID_CREDENTIALS, ACCOUNT_LOCKED, INVALID_OTP, PIN_INVALID, PIN_LOCKED, MFA_REQUIRED, STAFF_ONLY, TOO_MANY_REQUESTS, KYC_REQUIRED, RISK_REVIEW, LIMIT_EXCEEDED, INSUFFICIENT_FUNDS, QUOTE_EXPIRED, IDEMPOTENCY_CONFLICT, REQUEST_IN_PROGRESS, PROVIDER_UNAVAILABLE]
+          examples: [VALIDATION_ERROR, UNAUTHENTICATED, INVALID_CREDENTIALS, ACCOUNT_LOCKED, INVALID_OTP, PIN_INVALID, PIN_LOCKED, MFA_REQUIRED, STAFF_ONLY, TOO_MANY_REQUESTS, KYC_REQUIRED, RISK_REVIEW, LIMIT_EXCEEDED, LIMITS_NOT_CONFIGURED, CORRIDOR_UNAVAILABLE, ENVIRONMENT_MISMATCH, QUOTE_EXPIRED, RECEIPT_NOT_AVAILABLE, INVALID_WEBHOOK, IDEMPOTENCY_CONFLICT, REQUEST_IN_PROGRESS, PROVIDER_UNAVAILABLE]
         message: { type: string }
         errors:
           type: object
@@ -635,16 +697,16 @@ components:
 
     CurrencyCode:
       type: string
-      enum: [XAF, EUR, USD, GBP]
+      enum: [XAF, XOF, EUR, USD, GBP]
     CountryCode:
       type: string
       pattern: '^[A-Z]{2}$'
     ProviderCode:
       type: string
-      enum: [visa_direct, moneygram, western_union, mtn_momo, airtel_money]
+      enum: [visa_direct, moneygram, western_union, ria, mtn_momo, airtel_money]
     PaymentMethod:
       type: string
-      enum: [wallet, card, mobile_money, bank_account]
+      enum: [card, mobile_money, bank_account]
     PayoutMethod:
       type: string
       enum: [card, mobile_money, bank_account, cash_pickup]
@@ -709,170 +771,158 @@ components:
         mfa_enabled: { type: boolean }
         pin_set: { type: boolean }
 
-    Wallet:
+    SimulationScenario:
+      type: string
+      enum: [SUCCESS, PAYMENT_REFUSED, PAYMENT_TIMEOUT, PAYMENT_UNKNOWN_RESPONSE, TRANSFER_FAILED, TRANSFER_PENDING, TRANSFER_TIMEOUT]
+    Network:
       type: object
       properties:
-        id: { type: string, format: uuid }
-        type: { type: string, enum: [PERSONAL, SHARED, SAVINGS] }
-        label: { type: string }
-        status: { type: string, enum: [ACTIVE, FROZEN, CLOSED] }
-        balances:
+        code: { $ref: '#/components/schemas/ProviderCode' }
+        name: { type: string }
+        environment: { type: string, enum: [mock, sandbox, production] }
+        is_simulation: { type: boolean }
+        destinations:
           type: array
           items:
             type: object
             properties:
+              country: { $ref: '#/components/schemas/CountryCode' }
+              name: { type: string }
               currency: { $ref: '#/components/schemas/CurrencyCode' }
-              available: { type: integer }
-              reserved: { type: integer }
-    WalletTransactionType:
-      type: string
-      enum: [DEPOSIT, WITHDRAWAL, TRANSFER_OUT, TRANSFER_IN, FEE, REFUND, REVERSAL]
-    WalletTransaction:
+              payout_methods:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    code: { $ref: '#/components/schemas/PayoutMethod' }
+                    label: { type: string }
+    FieldSpec:
       type: object
       properties:
-        id: { type: string, format: uuid }
-        type: { $ref: '#/components/schemas/WalletTransactionType' }
-        amount: { type: integer, description: 'Signé, en unités mineures' }
-        currency: { $ref: '#/components/schemas/CurrencyCode' }
-        description: { type: string }
-        transfer_id: { type: [string, 'null'], format: uuid }
-        created_at: { type: string, format: date-time }
-    CursorMeta:
-      type: object
-      properties:
-        next_cursor: { type: [string, 'null'] }
-        per_page: { type: integer }
-
+        name: { type: string }
+        label: { type: string }
+        required: { type: boolean }
+        source: { type: string, enum: [SIMULATION, PROVIDER] }
     QuoteRequest:
       type: object
-      required: [send_amount, send_currency, destination_country, payout_method]
+      required: [network, funding_provider, destination_country, payout_method, send_amount]
       properties:
-        send_amount: { type: integer, minimum: 1 }
-        send_currency: { $ref: '#/components/schemas/CurrencyCode' }
-        receive_currency: { $ref: '#/components/schemas/CurrencyCode' }
+        network: { $ref: '#/components/schemas/ProviderCode' }
+        funding_provider: { type: string, enum: [mtn_momo, airtel_money] }
         destination_country: { $ref: '#/components/schemas/CountryCode' }
-        payment_method: { $ref: '#/components/schemas/PaymentMethod' }
         payout_method: { $ref: '#/components/schemas/PayoutMethod' }
-        beneficiary_id: { type: string, format: uuid }
-        provider: { $ref: '#/components/schemas/ProviderCode' }
+        send_amount: { type: integer, minimum: 1000, description: Montant envoyé en XAF }
     FeeLine:
       type: object
       properties:
-        component: { type: string, enum: [FIXED, PERCENTAGE, PROVIDER, FX, COUNTRY, PAYMENT_METHOD, PAYOUT_METHOD] }
+        component: { type: string, enum: [PROVIDER, FIXED, PERCENTAGE] }
+        label: { type: string }
         amount: { type: integer }
-        currency: { $ref: '#/components/schemas/CurrencyCode' }
     Quote:
       type: object
       properties:
         id: { type: string, format: uuid }
-        provider: { $ref: '#/components/schemas/ProviderCode' }
+        network: { type: object, properties: { code: { type: string }, name: { type: string } } }
+        funding_provider: { type: object, properties: { code: { type: string }, name: { type: string } } }
+        environment: { type: string }
+        is_simulated: { type: boolean }
+        simulation_notice: { type: [string, 'null'] }
         send: { $ref: '#/components/schemas/Money' }
-        receive: { $ref: '#/components/schemas/Money' }
-        fx_rate: { type: string, description: Décimal en chaîne pour éviter les erreurs d'arrondi, examples: ['655.957000000000'] }
-        fees:
-          type: array
-          items: { $ref: '#/components/schemas/FeeLine' }
+        fees: { type: array, items: { $ref: '#/components/schemas/FeeLine' } }
         total_fees: { $ref: '#/components/schemas/Money' }
         total_debit: { $ref: '#/components/schemas/Money' }
+        receive: { $ref: '#/components/schemas/Money' }
+        fx_rate: { type: string }
+        fx_rate_source: { type: string }
+        destination_country: { $ref: '#/components/schemas/CountryCode' }
         payout_method: { $ref: '#/components/schemas/PayoutMethod' }
-        estimated_delivery: { type: [string, 'null'], description: NOT CONFIRMED tant que le provider ne le fournit pas }
         expires_at: { type: string, format: date-time }
-
-    TransferAuthorization:
-      type: object
-      description: Preuve d'authentification forte, à usage unique.
-      oneOf:
-        - required: [method, pin]
-          properties:
-            method: { const: pin }
-            pin: { type: string, pattern: '^[0-9]{6}$' }
-        - required: [method, device_id, challenge_id, signature]
-          properties:
-            method: { const: biometric }
-            device_id: { type: string }
-            challenge_id: { type: string, format: uuid }
-            signature: { type: string, description: Signature base64 du challenge par la clé de l'appareil }
     CreateTransferRequest:
       type: object
-      required: [quote_id, beneficiary_id, authorization]
+      required: [quote_id, beneficiary_id, funding_msisdn, pin]
       properties:
         quote_id: { type: string, format: uuid }
-        wallet_id: { type: string, format: uuid }
         beneficiary_id: { type: string, format: uuid }
-        purpose: { type: string, examples: [FAMILY_SUPPORT] }
-        note: { type: string, maxLength: 140 }
-        authorization: { $ref: '#/components/schemas/TransferAuthorization' }
-        otp_code: { type: string, description: Requis si le moteur de risque exige un step-up }
-
+        funding_msisdn: { type: string, pattern: '^\+242[0-9]{9}$', description: Numéro Mobile Money débité }
+        pin: { type: string, pattern: '^[0-9]{6}$', description: PIN de transaction **Cashop** (jamais le PIN Mobile Money) }
+        purpose: { type: string }
+        note: { type: string }
+        simulation_scenario: { $ref: '#/components/schemas/SimulationScenario' }
     TransferStatus:
       type: string
-      enum: [QUOTED, AWAITING_CONFIRMATION, AUTHORIZED, FUNDS_RESERVED, SUBMITTED, PENDING, PROCESSING,
-             COMPLETED, FAILED, REVERSED, UNKNOWN, CANCEL_REQUESTED, CANCELLED, REFUND_PENDING, REFUNDED,
-             EXPIRED, REJECTED_KYC, REJECTED_RISK]
-    TransferEvent:
-      type: object
-      properties:
-        from_status: { $ref: '#/components/schemas/TransferStatus' }
-        to_status: { $ref: '#/components/schemas/TransferStatus' }
-        source: { type: string, enum: [API, WEBHOOK, POLLING, ADMIN, SYSTEM] }
-        created_at: { type: string, format: date-time }
+      description: Voir docs/TRANSFER-STATES.md
+      enum: [INITIATED, QUOTE_PENDING, QUOTE_CONFIRMED, PAYMENT_PENDING, PAYMENT_CONFIRMED, TRANSFER_PENDING, TRANSFER_CONFIRMED, TRANSFER_AVAILABLE_FOR_PICKUP, PAYOUT_PENDING, PAYOUT_CONFIRMED, CANCEL_PENDING, REFUND_PENDING, REFUNDED, FAILED, CANCELLED, REQUIRES_RECONCILIATION]
     Transfer:
       type: object
       properties:
-        id: { type: string, format: uuid, description: transaction_id }
+        id: { type: string, format: uuid }
         status: { $ref: '#/components/schemas/TransferStatus' }
-        provider: { $ref: '#/components/schemas/ProviderCode' }
+        status_label: { type: string }
+        is_terminal: { type: boolean }
+        is_delivered: { type: boolean }
+        environment: { type: string }
+        is_simulation: { type: boolean }
+        simulation_notice: { type: [string, 'null'] }
+        network: { type: object }
+        funding:
+          type: object
+          properties:
+            provider: { type: object }
+            msisdn_masked: { type: string }
+            payment_status: { type: [string, 'null'], enum: [PENDING, CONFIRMED, FAILED, UNKNOWN, null] }
+            payment_reference: { type: [string, 'null'] }
+        beneficiary: { type: object }
         send: { $ref: '#/components/schemas/Money' }
-        receive: { $ref: '#/components/schemas/Money' }
-        fx_rate: { type: string }
         total_fees: { $ref: '#/components/schemas/Money' }
         total_debit: { $ref: '#/components/schemas/Money' }
+        receive: { $ref: '#/components/schemas/Money' }
+        fx_rate: { type: string }
         payout_method: { $ref: '#/components/schemas/PayoutMethod' }
-        beneficiary: { $ref: '#/components/schemas/Beneficiary' }
-        correlation_id: { type: string }
-        external_reference: { type: string }
-        provider_reference: { type: [string, 'null'] }
-        pickup_code: { type: [string, 'null'], description: Code de retrait (cash pickup) }
-        failure: 
-          type: [object, 'null']
-          properties:
-            code: { type: string }
-            message: { type: string }
-        timeline:
-          type: array
-          items: { $ref: '#/components/schemas/TransferEvent' }
+        destination_country: { $ref: '#/components/schemas/CountryCode' }
+        external_reference: { type: string, description: Référence Cashop CSH-XXXX-XXXX }
+        provider_reference: { type: [string, 'null'], description: "En simulation, préfixe SIM- : jamais une référence réseau valide" }
+        pickup_code: { type: [string, 'null'] }
+        failure: { type: [object, 'null'] }
+        refund: { type: [object, 'null'] }
+        receipts: { type: array, items: { type: object } }
+        timeline: { type: array, items: { $ref: '#/components/schemas/TransferEvent' } }
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
-    Refund:
+    TransferEvent:
       type: object
       properties:
-        id: { type: string, format: uuid }
-        transfer_id: { type: string, format: uuid }
-        amount: { $ref: '#/components/schemas/Money' }
-        status: { type: string, enum: [REQUESTED, APPROVED, PROCESSING, COMPLETED, FAILED, REJECTED] }
-        created_at: { type: string, format: date-time }
-
+        from: { type: [string, 'null'] }
+        to: { $ref: '#/components/schemas/TransferStatus' }
+        label: { type: string }
+        source: { type: string }
+        at: { type: string, format: date-time }
+    Receipt:
+      type: object
+      properties:
+        number: { type: string }
+        kind: { type: string, enum: [TRANSFER, REFUND] }
+        is_simulation: { type: boolean }
+        content: { type: object }
+        issued_at: { type: string, format: date-time }
     BeneficiaryInput:
       type: object
-      required: [name, country, payout_method, details]
+      required: [first_name, last_name, country]
       properties:
-        name: { type: string }
-        nickname: { type: string }
+        first_name: { type: string }
+        last_name: { type: string }
         country: { $ref: '#/components/schemas/CountryCode' }
-        payout_method: { $ref: '#/components/schemas/PayoutMethod' }
-        details:
-          type: object
-          description: Selon le mode de réception (MSISDN, jeton de carte, IBAN, ville de retrait…). Jamais de PAN en clair stocké.
-          additionalProperties: true
+        phone: { type: string, pattern: '^\+[1-9][0-9]{7,14}$' }
+        city: { type: string }
+        relationship: { type: string }
+        details: { type: object, additionalProperties: { type: string } }
     Beneficiary:
-      type: object
-      properties:
-        id: { type: string, format: uuid }
-        name: { type: string }
-        nickname: { type: string }
-        country: { $ref: '#/components/schemas/CountryCode' }
-        payout_method: { $ref: '#/components/schemas/PayoutMethod' }
-        masked_details: { type: string, examples: ['+237 6•• ••• 842', '•••• 4242'] }
+      allOf:
+        - $ref: '#/components/schemas/BeneficiaryInput'
+        - type: object
+          properties:
+            id: { type: string, format: uuid }
+            display_name: { type: string }
+            last_used_at: { type: [string, 'null'], format: date-time }
 
     KycStatus:
       type: string

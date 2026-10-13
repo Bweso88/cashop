@@ -10,7 +10,7 @@ use Illuminate\Support\Str;
 
 /**
  * Comptes système du ledger, un par devise active (docs/DATABASE.md §Ledger).
- * Les comptes wallet et provider_clearing sont créés à la demande (phase 5).
+ * Les comptes collection_clearing et remittance_payable (par prestataire) sont créés à la demande.
  */
 class SystemLedgerAccountSeeder extends Seeder
 {

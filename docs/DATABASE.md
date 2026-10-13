@@ -68,12 +68,13 @@ Seules 3 capacités sont `CONFIRMED` (MoneyGram : quote, update, commit), avec l
 users ─1:1─ user_profiles           users ─1:n─ user_devices          users ─n:n─ roles (spatie)
 users ─1:1─ kyc_profiles ─1:n─ kyc_documents
                          └─1:n─ kyc_verifications                    kyc_levels ─1:n─ kyc_profiles
-users ─1:n─ wallets ─1:n─ wallet_balances (1 par devise)
-                    └─1:n─ wallet_transactions ─n:1─ ledger_transactions
 ledger_accounts ─1:n─ ledger_entries ─n:1─ ledger_transactions
 users ─1:n─ beneficiaries
 users ─1:n─ transfer_quotes ─1:1─ transfers ─1:n─ transfer_events
+                                            ├─1:n─ payment_attempts (≤ 1 COLLECTION, DISBURSEMENT si remboursement)
                                             ├─1:n─ provider_transactions ─n:1─ providers
+                                            ├─1:n─ receipts (TRANSFER, REFUND)
+                                            ├─1:n─ reconciliation_records
                                             ├─1:n─ refunds
                                             └─1:n─ disputes
 providers ─1:n─ provider_capabilities
@@ -152,7 +153,7 @@ Tables du paquet `spatie/laravel-permission`. Rôles : `customer`, `support`, `c
 | confirmation_status | `CONFIRMED` / `NOT_CONFIRMED` |
 
 ### country_payment_methods / country_payout_methods
-`country_code`, `method` (`wallet`, `card`, `mobile_money`, `bank_account`, `cash_pickup`), `provider_id` null,
+`country_code`, `method` (`card`, `mobile_money`, `bank_account`, `cash_pickup`), `provider_id` null,
 `currency_code`, `is_enabled`. Permettent d'activer/désactiver une combinaison pays × provider × devise × méthode.
 
 ## KYC
@@ -175,20 +176,10 @@ chiffré, accès par URL signée courte), `mime_type`, `sha256`, `status`.
 `FACE_MATCH`, `SANCTIONS`, `PEP`), `result` (`PASS`/`FAIL`/`REVIEW`), `score` numeric(5,4) null,
 `raw_response` jsonb (chiffré si données personnelles), `performed_by`, `created_at`.
 
-## Wallet
+## Pas de portefeuille client
 
-### wallets
-`id`, `user_id`, `type` (`PERSONAL`, `SHARED`, `SAVINGS`), `status` (`ACTIVE`, `FROZEN`, `CLOSED`), `label`.
-
-### wallet_balances (projection)
-`wallet_id`, `currency_code` (unique ensemble), `ledger_account_id` (1:1), `available` bigint,
-`reserved` bigint, `version` int (verrou optimiste), `updated_at`. **Pas la source de vérité** : recalculable
-depuis `ledger_entries`.
-
-### wallet_transactions
-Vue métier lisible par l'utilisateur : `id`, `wallet_id`, `currency_code`, `type` (`DEPOSIT`, `WITHDRAWAL`,
-`TRANSFER_OUT`, `TRANSFER_IN`, `FEE`, `REFUND`, `REVERSAL`), `amount` bigint signé, `ledger_transaction_id` FK,
-`transfer_id` null, `description`, `created_at`.
+Cashop ne détient pas de fonds clients ([ADR 0004](adr/0004-sans-portefeuille-client.md)) : il n'existe ni
+table `wallets` ni solde client. Un test le vérifie (`SchemaTest::aucun_portefeuille_client_n_existe`).
 
 ## Ledger
 
@@ -196,11 +187,11 @@ Vue métier lisible par l'utilisateur : `id`, `wallet_id`, `currency_code`, `typ
 | Colonne | Notes |
 |---|---|
 | id | uuid |
-| code | unique, ex. `wallet:{wallet_id}:EUR`, `in_flight:EUR`, `provider_clearing:mtn_momo:XAF`, `fee_revenue:EUR`, `fx_revenue:EUR`, `suspense:EUR` |
+| code | unique, ex. `collection_clearing:mtn_momo:XAF`, `in_flight:XAF`, `remittance_payable:western_union:XAF`, `fee_revenue:XAF`, `suspense:XAF` |
 | type | `ASSET`, `LIABILITY`, `REVENUE`, `EXPENSE`, `EQUITY` |
 | currency_code | un compte = une devise |
 | normal_balance | `DEBIT` ou `CREDIT` |
-| owner_type / owner_id | polymorphique (wallet, provider, système) |
+| owner_type / owner_id | polymorphique (provider, système) |
 
 ### ledger_transactions
 `id`, `type` (`TRANSFER_RESERVE`, `TRANSFER_SETTLE`, `TRANSFER_REVERSE`, `DEPOSIT`, `REFUND`, `FX_CONVERSION`,
@@ -217,42 +208,56 @@ Invariants :
 2. `ledger_entries` : trigger refusant `UPDATE` et `DELETE`.
 3. Une conversion de devises = deux jambes, chacune équilibrée dans sa devise, via des comptes `fx_position:{devise}`.
 
-Exemple — envoi de 100,00 EUR avec 2,00 EUR de frais :
+Exemple — envoi de 100 000 XAF payé par MTN MoMo, 1 000 XAF de frais Cashop et 2 000 XAF de frais réseau :
 
 | Étape | Débit | Crédit |
 |---|---|---|
-| Réservation | `wallet:{w}:EUR` 10 200 | `in_flight:EUR` 10 200 |
-| Succès | `in_flight:EUR` 10 200 | `provider_clearing:{p}:EUR` 10 000 · `fee_revenue:EUR` 200 |
-| Échec | `in_flight:EUR` 10 200 | `wallet:{w}:EUR` 10 200 |
+| Paiement confirmé | `collection_clearing:mtn_momo:XAF` 103 000 | `in_flight:XAF` 103 000 |
+| Transfert livré | `in_flight:XAF` 103 000 | `remittance_payable:western_union:XAF` 102 000 · `fee_revenue:XAF` 1 000 |
+| Remboursement | `in_flight:XAF` 103 000 | `collection_clearing:mtn_momo:XAF` 103 000 |
 
 ## Transferts
 
 ### beneficiaries
-`id`, `user_id`, `name` (chiffré), `country_code`, `payout_method`, `details` jsonb **chiffré** (MSISDN, PAN
-tokenisé, IBAN…), `details_hash`, `nickname`, `last_used_at`. **Aucun PAN en clair** : tokenisation ou stockage
-chez le provider.
+`id`, `user_id`, `first_name`, `last_name`, `phone_e164`, `city`, `details` (**chiffrés**), `country_code`,
+`relationship`, `display_name` (« Marie O. »), `identity_hash` (HMAC, unique par utilisateur : dédoublonnage),
+`last_used_at`, `deleted_at`.
 
 ### transfer_quotes
-`id`, `user_id`, `provider_id`, `send_amount`, `send_currency`, `receive_amount`, `receive_currency`,
-`fx_rate` numeric(24,12), `fx_rate_source`, `fee_breakdown` jsonb (par composant du FeeEngine), `total_fees`,
-`total_debit`, `payment_method`, `payout_method`, `destination_country`, `provider_quote_reference` null,
+`id`, `user_id`, `provider_id` (réseau), `funding_provider_id` (portefeuille), `environment`, `is_simulated`,
+`send_amount`, `send_currency`, `receive_amount`, `receive_currency`, `fx_rate` numeric(24,12), `fx_rate_source`,
+`fee_breakdown` jsonb, `total_fees`, `total_debit`, `payment_method`, `payout_method`, `destination_country`,
 `expires_at`, `status` (`ACTIVE`, `USED`, `EXPIRED`).
 
 ### transfers
 | Colonne | Notes |
 |---|---|
-| id | = `transaction_id` exposé |
-| user_id, wallet_id, quote_id, beneficiary_id, provider_id | |
-| status | voir cycle de vie ([ARCHITECTURE.md §5](ARCHITECTURE.md#5-cycle-de-vie-dun-transfert)) |
-| send_amount, send_currency, receive_amount, receive_currency, fx_rate, total_fees, total_debit | figés à la confirmation |
-| payment_method, payout_method, destination_country | |
-| correlation_id | propagé dans tous les logs |
-| external_reference | référence Cashop envoyée au provider (unique) |
-| provider_reference / provider_request_id | renvoyés par le provider |
-| pickup_code | chiffré (MTCN, référence de retrait) |
-| failure_code / failure_reason | normalisés Cashop + message provider |
-| idempotency_key | |
-| authorized_at, submitted_at, completed_at, failed_at | |
+| id | identifiant exposé |
+| user_id, quote_id (unique), beneficiary_id, provider_id, funding_provider_id | |
+| environment | `mock` / `sandbox` / `production`, figé à la création |
+| status | voir [TRANSFER-STATES.md](TRANSFER-STATES.md) |
+| simulation_scenario | autorisé seulement si `environment = 'mock'` (CHECK) |
+| funding_account / funding_account_hash | numéro Mobile Money chiffré + HMAC |
+| send_amount … total_debit, fx_rate | figés depuis le devis |
+| external_reference | référence Cashop `CSH-XXXX-XXXX` (unique), envoyée au réseau |
+| provider_reference, pickup_code (chiffré) | renvoyés par le réseau (`SIM-…` en simulation) |
+| failure_code / failure_reason | |
+| idempotency_key | unique par utilisateur |
+| payment_confirmed_at, submitted_at, completed_at, failed_at | `submitted_at` empêche toute double soumission |
+| next_status_poll_at, status_poll_count | suivi asynchrone |
+
+### payment_attempts
+Opérations Mobile Money : `direction` (`COLLECTION` débit client, `DISBURSEMENT` remboursement), `environment`,
+`account` chiffré, `amount`, `status` (`PENDING`, `CONFIRMED`, `FAILED`, `UNKNOWN`), `provider_reference`.
+Index unique partiel `payment_attempts_one_collection` : **un seul débit par transfert**.
+
+### receipts (append-only)
+`number` unique (`RC-…` transfert, `RB-…` remboursement), `kind` unique par transfert, `content` jsonb figé,
+`is_simulation`.
+
+### reconciliation_records (append-only)
+Preuve de chaque rapprochement : statuts vus chez l'opérateur et le réseau, `outcome`
+(`RESOLVED`, `STILL_UNKNOWN`, `ESCALATED`), `evidence` jsonb, `actor_id` (null = système).
 
 ### transfer_events
 `id`, `transfer_id`, `from_status`, `to_status`, `source` (`API`, `WEBHOOK`, `POLLING`, `ADMIN`, `SYSTEM`),
@@ -264,8 +269,8 @@ Chaque appel sortant : `id`, `transfer_id`, `provider_id`, `operation` (`QUOTE`,
 (**masqués** : pas de PAN, PIN, secret), `error_code`, `created_at`. Alimente la santé des providers.
 
 ### refunds
-`id`, `transfer_id`, `amount`, `currency_code`, `reason`, `status` (`REQUESTED`, `APPROVED`, `PROCESSING`,
-`COMPLETED`, `FAILED`, `REJECTED`), `requested_by`, `approved_by` (≠ requested_by : 4-eyes),
+`id`, `transfer_id`, `payment_attempt_id`, `amount`, `currency_code`, `reason`, `status` (`REQUESTED`, `APPROVED`, `PROCESSING`,
+`COMPLETED`, `FAILED`, `REJECTED`), `requested_by` (null = remboursement automatique du système), `approved_by` (≠ requested_by : 4-eyes),
 `provider_reference`, `ledger_transaction_id`.
 
 ### disputes
