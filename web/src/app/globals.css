@@ -1,0 +1,63 @@
+@import "tailwindcss";
+
+/*
+ * Identité Cashop : fond nuit, surfaces ardoise, accent émeraude, dégradés émeraude → violet.
+ * Toutes les couleurs passent par ces jetons.
+ */
+@theme {
+  --color-ink: #0a0d14;
+  --color-surface: #111620;
+  --color-surface-2: #171d2a;
+  --color-surface-3: #1f2636;
+  --color-line: #262e40;
+  --color-text: #e9edf5;
+  --color-muted: #8b94a8;
+  --color-faint: #5b6478;
+  --color-brand: #23d68a;
+  --color-brand-strong: #14b874;
+  --color-brand-soft: #23d68a1f;
+  --color-violet: #7c5cff;
+  --color-action: #3d4c80;
+  --color-action-hover: #4a5b96;
+  --color-danger: #f0596b;
+  --color-warning: #f5b347;
+  --color-info: #5aa9ff;
+
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --radius-card: 1.25rem;
+}
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  background: var(--color-ink);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Halo de marque discret en arrière-plan */
+.cashop-glow {
+  background:
+    radial-gradient(60rem 30rem at 10% -10%, #23d68a14, transparent 60%),
+    radial-gradient(50rem 30rem at 110% 10%, #7c5cff14, transparent 60%),
+    var(--color-ink);
+}
+
+.card-gradient-brand {
+  background: linear-gradient(135deg, #1a5f4a 0%, #17847a 45%, #2b6c8f 100%);
+}
+.card-gradient-violet {
+  background: linear-gradient(135deg, #3b2a6e 0%, #5b2f6e 55%, #2a3463 100%);
+}
+.card-gradient-night {
+  background: linear-gradient(135deg, #1b2440 0%, #1e3557 60%, #1a2b3f 100%);
+}
+
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
