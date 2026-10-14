@@ -45,9 +45,13 @@ class SeederTest extends TestCase
             ->orderBy('c.capability')
             ->get(['p.code', 'c.capability', 'c.source_reference']);
 
-        $this->assertSame(['moneygram'], $confirmed->pluck('code')->unique()->values()->all());
-        $this->assertSame(['commit', 'create', 'quote'], $confirmed->pluck('capability')->all());
-        $this->assertTrue($confirmed->every(fn ($c) => str_starts_with($c->source_reference, 'https://developer.moneygram.com/')));
+        $byProvider = $confirmed->groupBy('code')->map(fn ($rows) => $rows->pluck('capability')->sort()->values()->all())->sortKeys()->all();
+        $this->assertSame([
+            'moneygram' => ['commit', 'create', 'quote'],
+            'mtn_momo' => ['collection', 'disbursement', 'status', 'webhook'],
+        ], $byProvider);
+        // Chaque capacité confirmée cite la documentation officielle du prestataire.
+        $this->assertTrue($confirmed->every(fn ($c) => str_starts_with($c->source_reference, $c->code === 'mtn_momo' ? 'https://momodeveloper.mtn.com/' : 'https://developer.moneygram.com/')));
     }
 
     #[Test]

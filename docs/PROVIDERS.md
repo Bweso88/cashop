@@ -22,7 +22,7 @@ l'environnement de développement ; les points ci-dessous viennent de résultats
 
 ## Matrice des capacités (état actuel)
 
-| Capacité | Visa Direct | MoneyGram | Western Union | Ria | MTN MoMo | Airtel Money |
+| Capacité | Visa Direct | MoneyGram | Western Union | Ria | MTN MoMo² | Airtel Money |
 |---|---|---|---|---|---|---|
 | Quote | NOT CONFIRMED | OFFICIEL | NOT CONFIRMED¹ | NOT CONFIRMED | N/A (pas de quote documentée) — NOT CONFIRMED | NOT CONFIRMED |
 | Create / Update | PUBLIC-SECONDAIRE (push funds) | OFFICIEL (update) | NOT CONFIRMED¹ | NOT CONFIRMED | PUBLIC-SECONDAIRE | PUBLIC-SECONDAIRE |
@@ -34,6 +34,9 @@ l'environnement de développement ; les points ci-dessous viennent de résultats
 | Signature des webhooks | NOT CONFIRMED | NOT CONFIRMED | NOT CONFIRMED | NOT CONFIRMED | NOT CONFIRMED | NOT CONFIRMED |
 | Collection (encaissement) | NOT CONFIRMED (AFT) | N/A | N/A | N/A | PUBLIC-SECONDAIRE | PUBLIC-SECONDAIRE |
 | Pays / devises / plafonds / tarifs | NOT CONFIRMED | NOT CONFIRMED | NOT CONFIRMED | NOT CONFIRMED | NOT CONFIRMED | NOT CONFIRMED |
+
+² MTN MoMo : Collection, Disbursement, statut et notifications sont désormais **OFFICIELS** (portail
+momodeveloper.mtn.com, 2026-10-14) — voir [providers/MTN-MOMO.md](providers/MTN-MOMO.md).
 
 ¹ Western Union décrit une « Partner Money Transfer API » (estimation de frais, validation, création de
 transaction) mais le contrat technique n'est fourni qu'après onboarding partenaire.
@@ -114,22 +117,9 @@ partenaire ou sous-agent au Congo ; documentation API ; environnement de test ; 
 
 ## MTN Mobile Money
 
-| Élément | Information | Niveau |
-|---|---|---|
-| Portail | https://momodeveloper.mtn.com | PUBLIC-SECONDAIRE |
-| Produits | Collections, Disbursements, Remittances | PUBLIC-SECONDAIRE |
-| Sandbox | `https://sandbox.momodeveloper.mtn.com`, création d'un API user en libre-service | PUBLIC-SECONDAIRE |
-| Production | Onboarding **par pays** (filiale MTN locale) ; URL, identifiants et environnements par pays | NOT CONFIRMED |
-| Signature des callbacks | — | NOT CONFIRMED |
-| Pays, devises, plafonds, frais | — | NOT CONFIRMED |
-
-Classes prévues : `MtnMoMoClient` (un jeu d'identifiants par pays et par produit), `MtnMoMoProvider`,
-`MockMtnProvider`. Callbacks traités comme un **signal** : le statut est toujours relu via l'API.
-
-**À obtenir auprès de MTN (pour chaque pays) :** disponibilité des produits ; processus et documents
-d'onboarding ; URL de production et environnement cible ; identifiants par produit ; format et
-authentification des callbacks (liste blanche d'IP ?) ; vérification du titulaire de compte ; plafonds et
-frais ; devises ; conditions pour le transfrontalier (Remittances) ; règlement et relevés.
+**Connecteur officiel écrit** (`MtnMoMoConnector`, sandbox) à partir de la documentation du portail
+momodeveloper.mtn.com : débit (Request to Pay), remboursement (Transfer), statuts, notifications, erreurs.
+Détails, points encore NOT CONFIRMED et procédure de test : [providers/MTN-MOMO.md](providers/MTN-MOMO.md).
 
 ## Airtel Money
 

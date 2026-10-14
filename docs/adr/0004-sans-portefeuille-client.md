@@ -40,5 +40,8 @@ BEAC) que Cashop n'a pas — **vérification juridique indépendante requise**.
 - Les écrans web et mobile ne montrent plus de solde ; l'accueil présente les envois et leur statut.
 - Les flux réels de règlement (préfinancement du réseau, compte de collecte chez l'opérateur, délais de
   reversement) dépendent des contrats partenaires : **NOT CONFIRMED — PROVIDER DOCUMENTATION REQUIRED**.
+- Avec MTN MoMo (Request to Pay), le débit du client arrive sur le **compte marchand de Cashop** chez
+  l'opérateur, et les remboursements partent du **compte Disbursement de Cashop**. Cashop détient donc
+  brièvement des fonds en transit : ce schéma doit être validé par MTN Congo et un juriste.
 - La qualification juridique de l'activité (intermédiaire technique, agent, sous-agent) doit être validée par
   un juriste au Congo (lois n° 29-2019 et n° 26-2020, réglementation CEMAC) avant la production.

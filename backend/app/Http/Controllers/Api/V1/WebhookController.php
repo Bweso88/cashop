@@ -26,7 +26,7 @@ use Illuminate\Support\Str;
  */
 class WebhookController extends Controller
 {
-    public function __invoke(Request $request, string $provider, ConnectorRegistry $registry, TransferOrchestrator $orchestrator): JsonResponse
+    public function __invoke(Request $request, ConnectorRegistry $registry, TransferOrchestrator $orchestrator, string $provider, ?string $secret = null): JsonResponse
     {
         $model = Provider::query()->where('code', $provider)->first() ?? throw new ApiException('NOT_FOUND', 'Prestataire inconnu.', 404);
 

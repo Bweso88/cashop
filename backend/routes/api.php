@@ -47,5 +47,6 @@ Route::prefix('v1')->group(function () {
     });
 
     // Notifications des prestataires : authentifiées par leur propre mécanisme (pas de jeton Cashop).
-    Route::post('webhooks/{provider}', WebhookController::class)->middleware('throttle:webhooks');
+    // POST et PUT : MTN MoMo envoie ses notifications avec l'une ou l'autre méthode (pages Callback / API User).
+    Route::match(['post', 'put'], 'webhooks/{provider}/{secret?}', WebhookController::class)->middleware('throttle:webhooks');
 });

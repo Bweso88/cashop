@@ -22,6 +22,8 @@ class ProviderSeeder extends Seeder
 
     private const MONEYGRAM_UPDATE = 'https://developer.moneygram.com/moneygram-developer/docs/update-a-transaction';
 
+    private const MTN_DOCS = 'https://momodeveloper.mtn.com/api-documentation/use-cases';
+
     /**
      * Connecteurs : la classe officielle n'est implémentée qu'une fois la documentation partenaire
      * obtenue ; d'ici là seul le connecteur simulé est utilisable (environnement « mock »).
@@ -43,6 +45,12 @@ class ProviderSeeder extends Seeder
     private function confirmed(): array
     {
         return [
+            'mtn_momo' => [
+                ProviderCapability::Collection->value => self::MTN_DOCS,
+                ProviderCapability::Disbursement->value => self::MTN_DOCS,
+                ProviderCapability::Status->value => self::MTN_DOCS,
+                ProviderCapability::Webhook->value => self::MTN_DOCS,
+            ],
             'moneygram' => [
                 ProviderCapability::Quote->value => self::MONEYGRAM_TRANSFER_API,
                 ProviderCapability::Create->value => self::MONEYGRAM_UPDATE,
@@ -63,11 +71,7 @@ class ProviderSeeder extends Seeder
         return [
             'visa_direct' => [ProviderCapability::Create->value => $note],
             'mtn_momo' => [
-                ProviderCapability::Collection->value => $note,
-                ProviderCapability::Disbursement->value => $note,
                 ProviderCapability::Remittance->value => $note,
-                ProviderCapability::Status->value => $note,
-                ProviderCapability::Webhook->value => $note,
             ],
             'airtel_money' => [
                 ProviderCapability::Collection->value => $note,

@@ -1,5 +1,7 @@
 <?php
 
+use App\Domain\Providers\Connectors\MtnMoMo\MtnMoMoConnector;
+
 /*
 | Paramètres de sécurité Cashop. Les valeurs par défaut sont des choix de sécurité raisonnables,
 | pas des exigences réglementaires : à valider par la sécurité et la conformité.
@@ -66,7 +68,33 @@ return [
     // Connecteurs officiels : code prestataire => classe. Vide tant que la documentation et les
     // accès partenaires n'ont pas été obtenus (aucune intégration n'est inventée).
     'connectors' => [
-        'official' => [],
+        'official' => [
+            'mtn_momo' => MtnMoMoConnector::class,
+        ],
+    ],
+
+    // MTN MoMo Open API (voir docs/providers/MTN-MOMO.md). Aucune valeur secrète ici : tout vient
+    // de l'environnement. Sans configuration complète, le connecteur est indisponible.
+    'mtn_momo' => [
+        'base_url' => env('MTN_MOMO_BASE_URL'),
+        // « sandbox » en test ; « mtncongo » en production (page Common Error Codes).
+        'target_environment' => env('MTN_MOMO_TARGET_ENVIRONMENT'),
+        // NOT CONFIRMED : chemin de l'opération CreateAccessToken, « {product} » = collection|disbursement.
+        'token_path' => env('MTN_MOMO_TOKEN_PATH'),
+        // URL HTTPS sur le domaine déclaré comme providerCallbackHost, se terminant par le secret.
+        'callback_url' => env('MTN_MOMO_CALLBACK_URL'),
+        'callback_secret' => env('MTN_MOMO_CALLBACK_SECRET', ''),
+        'timeout' => (int) env('MTN_MOMO_TIMEOUT', 15),
+        'collection' => [
+            'subscription_key' => env('MTN_MOMO_COLLECTION_SUBSCRIPTION_KEY'),
+            'api_user' => env('MTN_MOMO_COLLECTION_API_USER'),
+            'api_key' => env('MTN_MOMO_COLLECTION_API_KEY'),
+        ],
+        'disbursement' => [
+            'subscription_key' => env('MTN_MOMO_DISBURSEMENT_SUBSCRIPTION_KEY'),
+            'api_user' => env('MTN_MOMO_DISBURSEMENT_API_USER'),
+            'api_key' => env('MTN_MOMO_DISBURSEMENT_API_KEY'),
+        ],
     ],
 
     // Rôles du personnel : MFA obligatoire, jetons courts, accès à /api/admin/v1.
