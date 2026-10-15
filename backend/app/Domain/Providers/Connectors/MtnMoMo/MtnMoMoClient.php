@@ -11,15 +11,13 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 
 /**
- * Client HTTP de la MoMo Open API (MTN). Sources : momodeveloper.mtn.com, pages « API User and API
- * Key Management », « Use Cases », « Callback », « Common Error Codes » (relevées le 2026-10-14).
+ * Client HTTP de la MoMo Open API (MTN). Sources : pages de momodeveloper.mtn.com et définitions
+ * OpenAPI officielles Collection / Disbursement (docs/providers/mtn-openapi/, 2026-10-15).
  *
  * OFFICIEL : en-têtes Ocp-Apim-Subscription-Key (une clé par produit), Authorization Bearer,
- * X-Reference-Id (UUID v4), X-Target-Environment (sandbox, mtncongo…), X-Callback-Url ; jeton
- * OAuth 2.0 client credentials (RFC 6749) obtenu avec l'API User et l'API Key en Basic.
- *
- * NOT CONFIRMED — PROVIDER DOCUMENTATION REQUIRED : chemin de l'opération de jeton (à lire dans
- * le Swagger « CreateAccessToken ») ; il n'a donc pas de valeur par défaut.
+ * X-Reference-Id (UUID v4), X-Target-Environment (sandbox, mtncongo…), X-Callback-Url ; jeton :
+ * POST {base}/{product}/token/ en Basic (API User / API Key), réponse access_token, token_type,
+ * expires_in (secondes).
  *
  * Aucun secret (clé, API Key, jeton) n'est jamais journalisé.
  */

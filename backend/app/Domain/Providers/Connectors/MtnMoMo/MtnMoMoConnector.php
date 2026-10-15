@@ -20,20 +20,18 @@ use Illuminate\Http\Request;
  * Connecteur officiel MTN Mobile Money (MoMo Open API) : débit du client (Collection →
  * Request to Pay) et remboursement (Disbursement → Transfer).
  *
- * OFFICIEL (pages « Use Cases », « Callback », « Common Error Codes ») :
+ * OFFICIEL (pages du portail + définitions OpenAPI Collection / Disbursement) :
  *  - POST {base}/collection/v1_0/requesttopay et POST {base}/disbursement/v1_0/transfer,
  *    corps { amount (chaîne), currency, externalId, payer|payee { partyIdType: MSISDN, partyId },
- *    payerMessage, payeeNote } ; réponse 202, statut PENDING puis SUCCESSFUL ou FAILED ;
- *  - GET …/requesttopay/{X-Reference-Id} pour le statut ; 404 = demande inexistante ;
- *  - 409 RESOURCE_ALREADY_EXIST = référence déjà utilisée ;
- *  - messages : 160 caractères maximum, pas d'apostrophe ; numéro avec indicatif pays ;
+ *    payerMessage, payeeNote } ; réponse 202 ;
+ *  - GET …/requesttopay/{referenceId} et GET …/transfer/{referenceId} : 200 avec status
+ *    (PENDING | SUCCESSFUL | FAILED), financialTransactionId, reason { code, message } ;
+ *    un échec est renvoyé en 200 ; 404 RESOURCE_NOT_FOUND = opération inexistante ;
+ *  - erreurs : corps ErrorReason { code, message } ; 409 RESOURCE_ALREADY_EXIST ;
+ *  - messages : 160 caractères maximum, pas d'apostrophe ; numéro E.164 avec indicatif pays ;
  *  - notification envoyée une seule fois, sans signature décrite : simple signal.
  *
- * NOT CONFIRMED — PROVIDER DOCUMENTATION REQUIRED (Swagger à fournir) :
- *  - GET …/disbursement/v1_0/transfer/{référence} (déduit par analogie avec requesttopay) ;
- *  - noms des champs de la réponse de statut (« status », « reason », « financialTransactionId ») ;
- *  - format du corps d'erreur (champ « code ») ;
- *  - numéro sans « + » et devise XAF pour mtncongo.
+ * NOT CONFIRMED — à confirmer avec MTN Congo : numéro sans « + », devise XAF, URL de production.
  */
 class MtnMoMoConnector implements WalletConnector
 {
@@ -44,7 +42,8 @@ class MtnMoMoConnector implements WalletConnector
     /** Refus explicites : la demande n'a pas été créée, aucun débit. */
     private const DEFINITIVE_ERRORS = [
         'PAYER_NOT_FOUND', 'PAYEE_NOT_FOUND', 'NOT_ALLOWED', 'NOT_ALLOWED_TARGET_ENVIRONMENT',
-        'INVALID_CALLBACK_URL_HOST', 'INVALID_CURRENCY',
+        'INVALID_CALLBACK_URL_HOST', 'INVALID_CURRENCY', 'NOT_ENOUGH_FUNDS', 'PAYER_LIMIT_REACHED',
+        'PAYEE_NOT_ALLOWED_TO_RECEIVE',
     ];
 
     private readonly MtnMoMoClient $client;
@@ -245,8 +244,11 @@ class MtnMoMoConnector implements WalletConnector
         return match ($code) {
             'PAYER_NOT_FOUND', 'PAYEE_NOT_FOUND' => 'Numéro sans compte Mobile Money actif.',
             'COULD_NOT_PERFORM_TRANSACTION', 'EXPIRED' => 'Paiement non validé dans le délai (5 minutes).',
-            'APPROVAL_REJECTED', 'REJECTED' => 'Paiement refusé par le titulaire du compte.',
+            'APPROVAL_REJECTED', 'PAYMENT_NOT_APPROVED' => 'Paiement refusé par le titulaire du compte.',
+            'TRANSACTION_CANCELED' => 'Opération annulée.',
             'NOT_ENOUGH_FUNDS' => 'Fonds insuffisants.',
+            'PAYER_LIMIT_REACHED' => 'Plafond Mobile Money atteint.',
+            'PAYEE_NOT_ALLOWED_TO_RECEIVE' => 'Ce compte ne peut pas recevoir de fonds.',
             'INTERNAL_PROCESSING_ERROR' => 'Opération refusée par MTN MoMo (souvent : fonds insuffisants).',
             default => 'Opération refusée par MTN MoMo.',
         };

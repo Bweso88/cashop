@@ -3,8 +3,9 @@
 Code : `backend/app/Domain/Providers/Connectors/MtnMoMo/`. Tests : `tests/Feature/Providers/MtnMoMoConnectorTest.php`.
 
 Sources : pages de momodeveloper.mtn.com transmises par l'équipe le 2026-10-14 — « API User and API Key
-Management », « Use Cases », « Sandbox Use Cases », « Callback », « Common Error Codes ».
-Le Swagger (onglet API) n'a pas encore été fourni.
+Management », « Use Cases », « Sandbox Use Cases », « Callback », « Common Error Codes » — et définitions
+OpenAPI officielles **Collection** et **Disbursement** téléchargées le 2026-10-15
+([mtn-openapi/](mtn-openapi/), copie de référence, sans aucun identifiant).
 
 ## Usage dans Cashop
 
@@ -22,14 +23,23 @@ Remittance, opérations « avec consentement », Aggregator (`transferType`, seu
 
 - Deux identifiants : **clé d'abonnement** par produit (`Ocp-Apim-Subscription-Key`) et **API User + API Key**
   par pays (sandbox : API de provisioning ; production : Partner / Account Portal).
-- Jeton OAuth 2.0 client credentials (RFC 6749), API User / API Key en Basic ; jeton réutilisé jusqu'à expiration.
+- Jeton : `POST {base}/{produit}/token/` (`/collection/token/`, `/disbursement/token/`), API User / API Key
+  en Basic ; réponse `access_token`, `token_type`, `expires_in` (secondes) ; réutilisé jusqu'à expiration.
 - En-têtes : `Authorization: Bearer`, `X-Reference-Id` (UUID v4), `X-Target-Environment`, `X-Callback-Url`.
 - `X-Target-Environment` : `sandbox` en test, **`mtncongo`** pour le Congo.
 - Sandbox : `https://sandbox.momodeveloper.mtn.com`, devise **EUR** uniquement.
 - `POST /collection/v1_0/requesttopay` et `POST /disbursement/v1_0/transfer` : corps `amount` (chaîne),
   `currency`, `externalId`, `payer` / `payee` `{partyIdType: MSISDN, partyId}`, `payerMessage`, `payeeNote`.
-- Réponse `202`, statut `PENDING` puis `SUCCESSFUL` ou `FAILED`. `GET /collection/v1_0/requesttopay/{id}`.
-- `409 RESOURCE_ALREADY_EXIST` : référence déjà utilisée. `404` au GET : opération inexistante.
+- Réponse `202`. Statut : `GET /collection/v1_0/requesttopay/{id}` et `GET /disbursement/v1_0/transfer/{id}`,
+  réponse `200` (même en cas d'échec) avec `status` (`PENDING`, `SUCCESSFUL`, `FAILED`),
+  `financialTransactionId`, `reason {code, message}`.
+- Erreurs : corps `{code, message}`. Codes : `PAYEE_NOT_FOUND`, `PAYER_NOT_FOUND`, `NOT_ALLOWED`,
+  `NOT_ALLOWED_TARGET_ENVIRONMENT`, `INVALID_CALLBACK_URL_HOST`, `INVALID_CURRENCY`, `SERVICE_UNAVAILABLE`,
+  `INTERNAL_PROCESSING_ERROR`, `NOT_ENOUGH_FUNDS`, `PAYER_LIMIT_REACHED`, `PAYEE_NOT_ALLOWED_TO_RECEIVE`,
+  `PAYMENT_NOT_APPROVED`, `RESOURCE_NOT_FOUND`, `APPROVAL_REJECTED`, `EXPIRED`, `TRANSACTION_CANCELED`,
+  `RESOURCE_ALREADY_EXIST`.
+- `409 RESOURCE_ALREADY_EXIST` : référence déjà utilisée. `404 RESOURCE_NOT_FOUND` au GET : opération inexistante.
+- Vérification d'un numéro : `GET /{produit}/v1_0/accountholder/msisdn/{numéro}/active` (pas encore utilisée).
 - Messages : 160 caractères maximum, pas d'apostrophe. Numéro avec indicatif pays.
 - Le client a **5 minutes** pour valider (`COULD_NOT_PERFORM_TRANSACTION`).
 - Disbursement : l'IP d'origine doit être déclarée à MTN (`403 FORBIDDEN IP`).
@@ -41,12 +51,8 @@ Remittance, opérations « avec consentement », Aggregator (`transferType`, seu
 
 | Point | Traitement actuel |
 |---|---|
-| Chemin de l'opération de jeton (CreateAccessToken) | variable `MTN_MOMO_TOKEN_PATH`, **sans valeur par défaut** |
 | URL de base de production | variable `MTN_MOMO_BASE_URL` |
-| `GET /disbursement/v1_0/transfer/{id}` | déduit par analogie avec Request to Pay |
-| Champs de la réponse de statut (`status`, `reason`, `financialTransactionId`) | tout statut absent ou inattendu = `UNKNOWN`, jamais un succès |
-| Format du corps d'erreur (champ `code`) | sans code reconnu, une erreur 500 est traitée comme un résultat inconnu |
-| Contenu de la notification | seul `externalId` (= référence Cashop) est lu ; le statut est toujours relu par GET |
+| Contenu exact de la notification (« similaire » à la réponse de statut) | seul `externalId` (= référence Cashop) est lu ; le statut est toujours relu par GET |
 | Numéro sans « + », devise XAF pour `mtncongo` | à confirmer avec MTN Congo |
 
 ## Correspondance des réponses
@@ -65,7 +71,7 @@ Remittance, opérations « avec consentement », Aggregator (`transferType`, seu
 2. Avec **Sandbox User Provisioning** (pour chaque produit, avec sa clé) : créer un API User
    (`POST {baseURL}/apiuser`, en-tête `X-Reference-Id` = un UUID, corps `{"providerCallbackHost": "<domaine>"}`)
    puis son API Key (`POST {baseURL}/apiuser/{uuid}/apikey`) ; `{baseURL}` exact : voir le Swagger de provisioning.
-3. Remplir `backend/.env` (jamais commité) : `MTN_MOMO_*`, dont `MTN_MOMO_TOKEN_PATH` lu dans le Swagger.
+3. Remplir `backend/.env` (jamais commité) avec les variables `MTN_MOMO_*` de `.env.example`.
 4. Lancer :
    ```bash
    php artisan cashop:mtn:sandbox-check                 # succès attendu

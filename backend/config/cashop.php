@@ -79,8 +79,8 @@ return [
         'base_url' => env('MTN_MOMO_BASE_URL'),
         // « sandbox » en test ; « mtncongo » en production (page Common Error Codes).
         'target_environment' => env('MTN_MOMO_TARGET_ENVIRONMENT'),
-        // NOT CONFIRMED : chemin de l'opération CreateAccessToken, « {product} » = collection|disbursement.
-        'token_path' => env('MTN_MOMO_TOKEN_PATH'),
+        // CreateAccessToken : POST {base}/{product}/token/ (Swagger Collection et Disbursement).
+        'token_path' => env('MTN_MOMO_TOKEN_PATH', '/{product}/token/'),
         // URL HTTPS sur le domaine déclaré comme providerCallbackHost, se terminant par le secret.
         'callback_url' => env('MTN_MOMO_CALLBACK_URL'),
         'callback_secret' => env('MTN_MOMO_CALLBACK_SECRET', ''),

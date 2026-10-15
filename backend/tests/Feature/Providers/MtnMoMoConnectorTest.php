@@ -41,7 +41,7 @@ class MtnMoMoConnectorTest extends TestCase
         config(['cashop.mtn_momo' => [
             'base_url' => self::BASE,
             'target_environment' => 'sandbox',
-            'token_path' => '/{product}/token-de-test/',
+            'token_path' => '/{product}/token/', // valeur par défaut, d'après le Swagger officiel
             'callback_url' => 'https://api.cashop.test/api/v1/webhooks/mtn_momo/s3cr3t',
             'callback_secret' => 's3cr3t',
             'timeout' => 5,
@@ -54,7 +54,7 @@ class MtnMoMoConnectorTest extends TestCase
     private function fake(array $responses): void
     {
         Http::fake([
-            self::BASE.'/*/token-de-test/' => Http::response(['access_token' => 'jeton', 'token_type' => 'access_token', 'expires_in' => 3600]),
+            self::BASE.'/*/token/' => Http::response(['access_token' => 'jeton', 'token_type' => 'access_token', 'expires_in' => 3600]),
             ...$responses,
         ]);
     }
@@ -77,7 +77,7 @@ class MtnMoMoConnectorTest extends TestCase
         $result = $this->collect();
 
         $this->assertSame(ConnectorStatus::Pending, $result->status);
-        Http::assertSent(fn (HttpRequest $r) => str_ends_with($r->url(), '/collection/token-de-test/')
+        Http::assertSent(fn (HttpRequest $r) => str_ends_with($r->url(), '/collection/token/')
             && $r->hasHeader('Authorization', 'Basic '.base64_encode('user-col:key-col'))
             && $r->hasHeader('Ocp-Apim-Subscription-Key', 'sub-col'));
         Http::assertSent(fn (HttpRequest $r) => $r->url() === self::BASE.'/collection/v1_0/requesttopay'
@@ -129,7 +129,7 @@ class MtnMoMoConnectorTest extends TestCase
         $this->fake([self::BASE.'/collection/v1_0/requesttopay/*' => Http::sequence()
             ->push(['status' => 'PENDING'])
             ->push(['status' => 'SUCCESSFUL'])
-            ->push(['status' => 'FAILED', 'reason' => 'APPROVAL_REJECTED'])
+            ->push(['status' => 'FAILED', 'reason' => ['code' => 'APPROVAL_REJECTED', 'message' => 'Rejected']])
             ->push(['status' => 'QUELQUE_CHOSE'])
             ->push([])
             ->push(['code' => 'RESOURCE_NOT_FOUND'], 404)]);
@@ -195,7 +195,7 @@ class MtnMoMoConnectorTest extends TestCase
     {
         $this->fake([
             self::BASE.'/disbursement/v1_0/transfer' => Http::response(null, 202),
-            self::BASE.'/disbursement/v1_0/transfer/*' => Http::response(['status' => 'FAILED', 'reason' => 'NOT_ENOUGH_FUNDS']),
+            self::BASE.'/disbursement/v1_0/transfer/*' => Http::response(['status' => 'FAILED', 'reason' => ['code' => 'NOT_ENOUGH_FUNDS', 'message' => 'The payer does not have enough funds.']]),
         ]);
 
         $created = $this->connector()->disburse(new DisbursementRequest(self::REF, '+242060000001', 103000, 'XAF', 'Remboursement Cashop'));
@@ -211,7 +211,7 @@ class MtnMoMoConnectorTest extends TestCase
     #[Test]
     public function jeton_refuse(): void
     {
-        Http::fake([self::BASE.'/*/token-de-test/' => Http::response(['error' => 'invalid_client'], 401)]);
+        Http::fake([self::BASE.'/*/token/' => Http::response(['error' => 'invalid_client'], 401)]);
 
         try {
             $this->collect();
@@ -226,7 +226,7 @@ class MtnMoMoConnectorTest extends TestCase
     #[Test]
     public function configuration_incomplete_connecteur_indisponible(): void
     {
-        config(['cashop.mtn_momo.token_path' => null]);
+        config(['cashop.mtn_momo.collection.api_key' => null]);
 
         $this->expectException(ConnectorUnavailableException::class);
         $this->connector();
