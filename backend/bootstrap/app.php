@@ -46,6 +46,8 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->prepend(AssignCorrelationId::class);
+        // API pure : jamais de redirection vers une page de connexion, toujours une erreur JSON 401.
+        $middleware->redirectGuestsTo(fn () => null);
         $middleware->append(SecurityHeaders::class);
         $middleware->alias([
             'abilities' => CheckAbilities::class,

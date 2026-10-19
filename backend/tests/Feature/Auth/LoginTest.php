@@ -109,6 +109,13 @@ class LoginTest extends AuthTestCase
     }
 
     #[Test]
+    public function sans_en_tete_accept_l_api_repond_401_en_json(): void
+    {
+        // Pas de redirection vers une page de connexion (inexistante) : erreur JSON normalisée.
+        $this->get('/api/v1/profile')->assertStatus(401)->assertJsonPath('code', 'UNAUTHENTICATED');
+    }
+
+    #[Test]
     public function deconnexion_revoque_le_jeton(): void
     {
         $token = $this->tokenFor('client@cashop.test');

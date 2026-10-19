@@ -182,15 +182,15 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/wallet": {
+    "/catalog/funding-providers": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** Portefeuilles et soldes */
-        get: operations["getWallet"];
+        /** Portefeuilles Mobile Money utilisables pour payer (MTN MoMo, Airtel Money au Congo) */
+        get: operations["listFundingProviders"];
         put?: never;
         post?: never;
         delete?: never;
@@ -199,15 +199,52 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/wallet/transactions": {
+    "/catalog/networks": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** Historique des mouvements */
-        get: operations["listWalletTransactions"];
+        /** Réseaux de transfert actifs et leurs destinations */
+        get: operations["listNetworks"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/catalog/networks/{network}/fields": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Informations bénéficiaire exigées par le réseau pour un corridor
+         * @description En simulation, les champs portent `source = SIMULATION` (exigences réelles NOT CONFIRMED).
+         */
+        get: operations["networkFields"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/catalog/simulation-scenarios": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Scénarios de démonstration (vide hors environnement simulé) */
+        get: operations["listSimulationScenarios"];
         put?: never;
         post?: never;
         delete?: never;
@@ -225,12 +262,8 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /**
-         * Comparer les offres des providers disponibles
-         * @description L'orchestrateur interroge les providers capables de servir le corridor, applique frais et taux
-         *     Cashop, vérifie les limites et renvoie des quotes à durée de validité limitée.
-         */
-        post: operations["quoteTransfer"];
+        /** Devis (frais détaillés, taux, montant reçu, expiration) */
+        post: operations["createQuote"];
         delete?: never;
         options?: never;
         head?: never;
@@ -244,9 +277,15 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /** Historique (filtres état / recherche par référence ou bénéficiaire) */
+        get: operations["listTransfers"];
         put?: never;
-        /** Créer et exécuter un transfert à partir d'une quote */
+        /**
+         * Confirmer le devis (PIN Cashop) et demander le débit Mobile Money
+         * @description Le client valide le débit **sur son téléphone** auprès de son opérateur : Cashop ne demande jamais
+         *     le PIN Mobile Money. Le transfert international n'est soumis au réseau qu'**après** confirmation du
+         *     paiement. Un rejeu avec la même `Idempotency-Key` renvoie le même transfert (200) sans nouveau débit.
+         */
         post: operations["createTransfer"];
         delete?: never;
         options?: never;
@@ -261,7 +300,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Détail d'un transfert (avec timeline) */
+        /** Détail, statut et chronologie */
         get: operations["getTransfer"];
         put?: never;
         post?: never;
@@ -271,7 +310,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/transfers/{id}/cancel": {
+    "/transfers/{id}/refresh": {
         parameters: {
             query?: never;
             header?: never;
@@ -280,25 +319,25 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Demander l'annulation (si le provider et le statut le permettent) */
-        post: operations["cancelTransfer"];
+        /** Relire le statut auprès des prestataires et faire avancer le transfert */
+        post: operations["refreshTransfer"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/transfers/{id}/refund": {
+    "/transfers/{id}/receipt": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /** Reçus émis (transfert livré et/ou remboursement) */
+        get: operations["getReceipts"];
         put?: never;
-        /** Demander un remboursement (soumis à validation) */
-        post: operations["refundTransfer"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -312,12 +351,33 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Liste des bénéficiaires */
+        /** Bénéficiaires enregistrés */
         get: operations["listBeneficiaries"];
         put?: never;
-        /** Ajouter un bénéficiaire */
+        /** Ajouter un bénéficiaire (un doublon renvoie l'existant, 200) */
         post: operations["createBeneficiary"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/beneficiaries/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        /** Détail */
+        get: operations["getBeneficiary"];
+        /** Modifier */
+        put: operations["updateBeneficiary"];
+        post?: never;
+        /** Supprimer (suppression logique) */
+        delete: operations["deleteBeneficiary"];
         options?: never;
         head?: never;
         patch?: never;
@@ -432,8 +492,12 @@ export interface components {
              * @example KYC_REQUIRED
              * @example RISK_REVIEW
              * @example LIMIT_EXCEEDED
-             * @example INSUFFICIENT_FUNDS
+             * @example LIMITS_NOT_CONFIGURED
+             * @example CORRIDOR_UNAVAILABLE
+             * @example ENVIRONMENT_MISMATCH
              * @example QUOTE_EXPIRED
+             * @example RECEIPT_NOT_AVAILABLE
+             * @example INVALID_WEBHOOK
              * @example IDEMPOTENCY_CONFLICT
              * @example REQUEST_IN_PROGRESS
              * @example PROVIDER_UNAVAILABLE
@@ -446,12 +510,12 @@ export interface components {
             correlation_id?: string;
         };
         /** @enum {string} */
-        CurrencyCode: "XAF" | "EUR" | "USD" | "GBP";
+        CurrencyCode: "XAF" | "XOF" | "EUR" | "USD" | "GBP";
         CountryCode: string;
         /** @enum {string} */
-        ProviderCode: "visa_direct" | "moneygram" | "western_union" | "mtn_momo" | "airtel_money";
+        ProviderCode: "visa_direct" | "moneygram" | "western_union" | "ria" | "mtn_momo" | "airtel_money";
         /** @enum {string} */
-        PaymentMethod: "wallet" | "card" | "mobile_money" | "bank_account";
+        PaymentMethod: "card" | "mobile_money" | "bank_account";
         /** @enum {string} */
         PayoutMethod: "card" | "mobile_money" | "bank_account" | "cash_pickup";
         Money: {
@@ -513,177 +577,164 @@ export interface components {
             mfa_enabled?: boolean;
             pin_set?: boolean;
         };
-        Wallet: {
-            /** Format: uuid */
-            id?: string;
+        /** @enum {string} */
+        SimulationScenario: "SUCCESS" | "PAYMENT_REFUSED" | "PAYMENT_TIMEOUT" | "PAYMENT_UNKNOWN_RESPONSE" | "TRANSFER_FAILED" | "TRANSFER_PENDING" | "TRANSFER_TIMEOUT";
+        Network: {
+            code?: components["schemas"]["ProviderCode"];
+            name?: string;
             /** @enum {string} */
-            type?: "PERSONAL" | "SHARED" | "SAVINGS";
-            label?: string;
-            /** @enum {string} */
-            status?: "ACTIVE" | "FROZEN" | "CLOSED";
-            balances?: {
+            environment?: "mock" | "sandbox" | "production";
+            is_simulation?: boolean;
+            destinations?: {
+                country?: components["schemas"]["CountryCode"];
+                name?: string;
                 currency?: components["schemas"]["CurrencyCode"];
-                available?: number;
-                reserved?: number;
+                payout_methods?: {
+                    code?: components["schemas"]["PayoutMethod"];
+                    label?: string;
+                }[];
             }[];
         };
-        /** @enum {string} */
-        WalletTransactionType: "DEPOSIT" | "WITHDRAWAL" | "TRANSFER_OUT" | "TRANSFER_IN" | "FEE" | "REFUND" | "REVERSAL";
-        WalletTransaction: {
-            /** Format: uuid */
-            id?: string;
-            type?: components["schemas"]["WalletTransactionType"];
-            /** @description Signé, en unités mineures */
-            amount?: number;
-            currency?: components["schemas"]["CurrencyCode"];
-            description?: string;
-            /** Format: uuid */
-            transfer_id?: string | null;
-            /** Format: date-time */
-            created_at?: string;
-        };
-        CursorMeta: {
-            next_cursor?: string | null;
-            per_page?: number;
+        FieldSpec: {
+            name?: string;
+            label?: string;
+            required?: boolean;
+            /** @enum {string} */
+            source?: "SIMULATION" | "PROVIDER";
         };
         QuoteRequest: {
-            send_amount: number;
-            send_currency: components["schemas"]["CurrencyCode"];
-            receive_currency?: components["schemas"]["CurrencyCode"];
+            network: components["schemas"]["ProviderCode"];
+            /** @enum {string} */
+            funding_provider: "mtn_momo" | "airtel_money";
             destination_country: components["schemas"]["CountryCode"];
-            payment_method?: components["schemas"]["PaymentMethod"];
             payout_method: components["schemas"]["PayoutMethod"];
-            /** Format: uuid */
-            beneficiary_id?: string;
-            provider?: components["schemas"]["ProviderCode"];
+            /** @description Montant envoyé en XAF */
+            send_amount: number;
         };
         FeeLine: {
             /** @enum {string} */
-            component?: "FIXED" | "PERCENTAGE" | "PROVIDER" | "FX" | "COUNTRY" | "PAYMENT_METHOD" | "PAYOUT_METHOD";
+            component?: "PROVIDER" | "FIXED" | "PERCENTAGE";
+            label?: string;
             amount?: number;
-            currency?: components["schemas"]["CurrencyCode"];
         };
         Quote: {
             /** Format: uuid */
             id?: string;
-            provider?: components["schemas"]["ProviderCode"];
+            network?: {
+                code?: string;
+                name?: string;
+            };
+            funding_provider?: {
+                code?: string;
+                name?: string;
+            };
+            environment?: string;
+            is_simulated?: boolean;
+            simulation_notice?: string | null;
             send?: components["schemas"]["Money"];
-            receive?: components["schemas"]["Money"];
-            /**
-             * @description Décimal en chaîne pour éviter les erreurs d'arrondi
-             * @example 655.957000000000
-             */
-            fx_rate?: string;
             fees?: components["schemas"]["FeeLine"][];
             total_fees?: components["schemas"]["Money"];
             total_debit?: components["schemas"]["Money"];
+            receive?: components["schemas"]["Money"];
+            fx_rate?: string;
+            fx_rate_source?: string;
+            destination_country?: components["schemas"]["CountryCode"];
             payout_method?: components["schemas"]["PayoutMethod"];
-            /** @description NOT CONFIRMED tant que le provider ne le fournit pas */
-            estimated_delivery?: string | null;
             /** Format: date-time */
             expires_at?: string;
-        };
-        /** @description Preuve d'authentification forte, à usage unique. */
-        TransferAuthorization: {
-            /** @constant */
-            method: "pin";
-            pin: string;
-        } | {
-            /** @constant */
-            method: "biometric";
-            device_id: string;
-            /** Format: uuid */
-            challenge_id: string;
-            /** @description Signature base64 du challenge par la clé de l'appareil */
-            signature: string;
         };
         CreateTransferRequest: {
             /** Format: uuid */
             quote_id: string;
             /** Format: uuid */
-            wallet_id?: string;
-            /** Format: uuid */
             beneficiary_id: string;
-            /** @example FAMILY_SUPPORT */
+            /** @description Numéro Mobile Money débité */
+            funding_msisdn: string;
+            /** @description PIN de transaction **Cashop** (jamais le PIN Mobile Money) */
+            pin: string;
             purpose?: string;
             note?: string;
-            authorization: components["schemas"]["TransferAuthorization"];
-            /** @description Requis si le moteur de risque exige un step-up */
-            otp_code?: string;
+            simulation_scenario?: components["schemas"]["SimulationScenario"];
         };
-        /** @enum {string} */
-        TransferStatus: "QUOTED" | "AWAITING_CONFIRMATION" | "AUTHORIZED" | "FUNDS_RESERVED" | "SUBMITTED" | "PENDING" | "PROCESSING" | "COMPLETED" | "FAILED" | "REVERSED" | "UNKNOWN" | "CANCEL_REQUESTED" | "CANCELLED" | "REFUND_PENDING" | "REFUNDED" | "EXPIRED" | "REJECTED_KYC" | "REJECTED_RISK";
-        TransferEvent: {
-            from_status?: components["schemas"]["TransferStatus"];
-            to_status?: components["schemas"]["TransferStatus"];
-            /** @enum {string} */
-            source?: "API" | "WEBHOOK" | "POLLING" | "ADMIN" | "SYSTEM";
-            /** Format: date-time */
-            created_at?: string;
-        };
+        /**
+         * @description Voir docs/TRANSFER-STATES.md
+         * @enum {string}
+         */
+        TransferStatus: "INITIATED" | "QUOTE_PENDING" | "QUOTE_CONFIRMED" | "PAYMENT_PENDING" | "PAYMENT_CONFIRMED" | "TRANSFER_PENDING" | "TRANSFER_CONFIRMED" | "TRANSFER_AVAILABLE_FOR_PICKUP" | "PAYOUT_PENDING" | "PAYOUT_CONFIRMED" | "CANCEL_PENDING" | "REFUND_PENDING" | "REFUNDED" | "FAILED" | "CANCELLED" | "REQUIRES_RECONCILIATION";
         Transfer: {
-            /**
-             * Format: uuid
-             * @description transaction_id
-             */
+            /** Format: uuid */
             id?: string;
             status?: components["schemas"]["TransferStatus"];
-            provider?: components["schemas"]["ProviderCode"];
+            status_label?: string;
+            is_terminal?: boolean;
+            is_delivered?: boolean;
+            environment?: string;
+            is_simulation?: boolean;
+            simulation_notice?: string | null;
+            network?: Record<string, never>;
+            funding?: {
+                provider?: Record<string, never>;
+                msisdn_masked?: string;
+                /** @enum {string|null} */
+                payment_status?: "PENDING" | "CONFIRMED" | "FAILED" | "UNKNOWN" | null;
+                payment_reference?: string | null;
+            };
+            beneficiary?: Record<string, never>;
             send?: components["schemas"]["Money"];
-            receive?: components["schemas"]["Money"];
-            fx_rate?: string;
             total_fees?: components["schemas"]["Money"];
             total_debit?: components["schemas"]["Money"];
+            receive?: components["schemas"]["Money"];
+            fx_rate?: string;
             payout_method?: components["schemas"]["PayoutMethod"];
-            beneficiary?: components["schemas"]["Beneficiary"];
-            correlation_id?: string;
+            destination_country?: components["schemas"]["CountryCode"];
+            /** @description Référence Cashop CSH-XXXX-XXXX */
             external_reference?: string;
+            /** @description En simulation, préfixe SIM- : jamais une référence réseau valide */
             provider_reference?: string | null;
-            /** @description Code de retrait (cash pickup) */
             pickup_code?: string | null;
-            failure?: {
-                code?: string;
-                message?: string;
-            } | null;
+            failure?: Record<string, never> | null;
+            refund?: Record<string, never> | null;
+            receipts?: Record<string, never>[];
             timeline?: components["schemas"]["TransferEvent"][];
             /** Format: date-time */
             created_at?: string;
             /** Format: date-time */
             updated_at?: string;
         };
-        Refund: {
-            /** Format: uuid */
-            id?: string;
-            /** Format: uuid */
-            transfer_id?: string;
-            amount?: components["schemas"]["Money"];
-            /** @enum {string} */
-            status?: "REQUESTED" | "APPROVED" | "PROCESSING" | "COMPLETED" | "FAILED" | "REJECTED";
+        TransferEvent: {
+            from?: string | null;
+            to?: components["schemas"]["TransferStatus"];
+            label?: string;
+            source?: string;
             /** Format: date-time */
-            created_at?: string;
+            at?: string;
+        };
+        Receipt: {
+            number?: string;
+            /** @enum {string} */
+            kind?: "TRANSFER" | "REFUND";
+            is_simulation?: boolean;
+            content?: Record<string, never>;
+            /** Format: date-time */
+            issued_at?: string;
         };
         BeneficiaryInput: {
-            name: string;
-            nickname?: string;
+            first_name: string;
+            last_name: string;
             country: components["schemas"]["CountryCode"];
-            payout_method: components["schemas"]["PayoutMethod"];
-            /** @description Selon le mode de réception (MSISDN, jeton de carte, IBAN, ville de retrait…). Jamais de PAN en clair stocké. */
-            details: {
-                [key: string]: unknown;
+            phone?: string;
+            city?: string;
+            relationship?: string;
+            details?: {
+                [key: string]: string;
             };
         };
-        Beneficiary: {
+        Beneficiary: components["schemas"]["BeneficiaryInput"] & {
             /** Format: uuid */
             id?: string;
-            name?: string;
-            nickname?: string;
-            country?: components["schemas"]["CountryCode"];
-            payout_method?: components["schemas"]["PayoutMethod"];
-            /**
-             * @example +237 6•• ••• 842
-             * @example •••• 4242
-             */
-            masked_details?: string;
+            display_name?: string;
+            /** Format: date-time */
+            last_used_at?: string | null;
         };
         /** @enum {string} */
         KycStatus: "PENDING" | "IN_REVIEW" | "VERIFIED" | "REJECTED" | "EXPIRED";
@@ -1116,7 +1167,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
         };
     };
-    getWallet: {
+    listFundingProviders: {
         parameters: {
             query?: never;
             header?: never;
@@ -1125,51 +1176,95 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Portefeuilles */
+            /** @description Liste */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": {
-                        total_balance?: components["schemas"]["Money"];
-                        wallets?: components["schemas"]["Wallet"][];
+                        data?: components["schemas"]["ProviderSummary"][];
                     };
                 };
             };
-            401: components["responses"]["Unauthorized"];
         };
     };
-    listWalletTransactions: {
+    listNetworks: {
         parameters: {
-            query?: {
-                cursor?: components["parameters"]["Cursor"];
-                per_page?: components["parameters"]["PerPage"];
-                currency?: components["schemas"]["CurrencyCode"];
-                type?: components["schemas"]["WalletTransactionType"];
-            };
+            query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description Page de mouvements */
+            /** @description Liste */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": {
-                        data?: components["schemas"]["WalletTransaction"][];
-                        meta?: components["schemas"]["CursorMeta"];
+                        data?: components["schemas"]["Network"][];
                     };
                 };
             };
-            401: components["responses"]["Unauthorized"];
         };
     };
-    quoteTransfer: {
+    networkFields: {
+        parameters: {
+            query: {
+                country: components["schemas"]["CountryCode"];
+                payout_method: components["schemas"]["PayoutMethod"];
+            };
+            header?: never;
+            path: {
+                network: components["schemas"]["ProviderCode"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Champs */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data?: components["schemas"]["FieldSpec"][];
+                    };
+                };
+            };
+        };
+    };
+    listSimulationScenarios: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Scénarios */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        enabled?: boolean;
+                        data?: {
+                            code?: components["schemas"]["SimulationScenario"];
+                            label?: string;
+                        }[];
+                    };
+                };
+            };
+        };
+    };
+    createQuote: {
         parameters: {
             query?: never;
             header?: never;
@@ -1182,22 +1277,51 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Quotes disponibles (triées) */
+            /** @description Devis */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Quote"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            422: components["responses"]["ValidationError"];
+            /** @description Connecteur indisponible (PROVIDER_UNAVAILABLE) — par ex. production désactivée ou connecteur officiel absent */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    listTransfers: {
+        parameters: {
+            query?: {
+                state?: "in_progress" | "completed" | "all";
+                q?: string;
+                page?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Page de transferts */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": {
-                        quotes?: components["schemas"]["Quote"][];
-                        unavailable_providers?: {
-                            provider?: string;
-                            reason?: string;
-                        }[];
+                        data?: components["schemas"]["Transfer"][];
+                        meta?: Record<string, never>;
                     };
                 };
             };
-            422: components["responses"]["ValidationError"];
         };
     };
     createTransfer: {
@@ -1216,16 +1340,14 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Rejeu idempotent — réponse d'origine renvoyée à l'identique */
+            /** @description Rejeu idempotent */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content: {
-                    "application/json": components["schemas"]["Transfer"];
-                };
+                content?: never;
             };
-            /** @description Transfert créé (statut initial, suivi asynchrone) */
+            /** @description Transfert créé, débit demandé */
             201: {
                 headers: {
                     [name: string]: unknown;
@@ -1234,7 +1356,13 @@ export interface operations {
                     "application/json": components["schemas"]["Transfer"];
                 };
             };
-            403: components["responses"]["Forbidden"];
+            /** @description PIN Cashop invalide (PIN_INVALID) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             409: components["responses"]["Conflict"];
             422: components["responses"]["ValidationError"];
         };
@@ -1262,13 +1390,10 @@ export interface operations {
             404: components["responses"]["NotFound"];
         };
     };
-    cancelTransfer: {
+    refreshTransfer: {
         parameters: {
             query?: never;
-            header: {
-                /** @description Identifiant unique de l'intention (UUID recommandé), 8 à 100 caractères. */
-                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
-            };
+            header?: never;
             path: {
                 id: components["parameters"]["TransferId"];
             };
@@ -1276,8 +1401,8 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Annulation demandée */
-            202: {
+            /** @description Transfert à jour */
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1285,42 +1410,39 @@ export interface operations {
                     "application/json": components["schemas"]["Transfer"];
                 };
             };
-            409: components["responses"]["Conflict"];
-            422: components["responses"]["ValidationError"];
+            404: components["responses"]["NotFound"];
         };
     };
-    refundTransfer: {
+    getReceipts: {
         parameters: {
             query?: never;
-            header: {
-                /** @description Identifiant unique de l'intention (UUID recommandé), 8 à 100 caractères. */
-                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
-            };
+            header?: never;
             path: {
                 id: components["parameters"]["TransferId"];
             };
             cookie?: never;
         };
-        requestBody?: {
-            content: {
-                "application/json": {
-                    reason: string;
-                    /** @description Remboursement partiel (unités mineures) */
-                    amount?: number;
-                };
-            };
-        };
+        requestBody?: never;
         responses: {
-            /** @description Demande de remboursement enregistrée */
-            202: {
+            /** @description Reçus */
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Refund"];
+                    "application/json": {
+                        data?: components["schemas"]["Receipt"][];
+                    };
                 };
             };
-            409: components["responses"]["Conflict"];
+            404: components["responses"]["NotFound"];
+            /** @description Aucun reçu tant que le transfert n'est ni livré ni remboursé (RECEIPT_NOT_AVAILABLE) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
     listBeneficiaries: {
@@ -1332,7 +1454,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Bénéficiaires */
+            /** @description Liste */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -1343,7 +1465,6 @@ export interface operations {
                     };
                 };
             };
-            401: components["responses"]["Unauthorized"];
         };
     };
     createBeneficiary: {
@@ -1359,6 +1480,13 @@ export interface operations {
             };
         };
         responses: {
+            /** @description Doublon — bénéficiaire existant */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description Créé */
             201: {
                 headers: {
@@ -1368,7 +1496,78 @@ export interface operations {
                     "application/json": components["schemas"]["Beneficiary"];
                 };
             };
-            401: components["responses"]["Unauthorized"];
+            422: components["responses"]["ValidationError"];
+        };
+    };
+    getBeneficiary: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Bénéficiaire */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Beneficiary"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    updateBeneficiary: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BeneficiaryInput"];
+            };
+        };
+        responses: {
+            /** @description Bénéficiaire */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Beneficiary"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    deleteBeneficiary: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Supprimé */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: components["responses"]["NotFound"];
         };
     };
     getKyc: {
@@ -1491,13 +1690,15 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Reçu (y compris doublon déjà traité) */
+            /** @description Reçu (`status: received`) ou doublon déjà traité (`status: duplicate`) */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": {
+                        /** @enum {string} */
+                        status?: "received" | "duplicate";
                         /** Format: uuid */
                         event_id?: string;
                     };

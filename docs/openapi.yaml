@@ -358,7 +358,7 @@ paths:
       tags: [Transfers]
       summary: Historique (filtres état / recherche par référence ou bénéficiaire)
       parameters:
-        - { name: state, in: query, schema: { type: string, enum: [in_progress, completed, failed] } }
+        - { name: state, in: query, schema: { type: string, enum: [in_progress, completed, all] } }
         - { name: q, in: query, schema: { type: string } }
         - { name: page, in: query, schema: { type: integer } }
       responses:
