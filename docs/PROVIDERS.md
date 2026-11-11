@@ -45,6 +45,12 @@ Cette matrice est reproduite en base (`provider_capabilities.confirmation_status
 
 ---
 
+## Visa Pay (Pismo)
+
+Page d'authentification sandbox reçue le 2026-11-11 : jeton `POST …/passport/v2/s2s/access-token`
+(Server Key / Server Secret). Adéquation au modèle sans portefeuille **à confirmer** avant tout code :
+[providers/VISA-PAY.md](providers/VISA-PAY.md).
+
 ## Visa Direct
 
 | Élément | Information | Niveau |
