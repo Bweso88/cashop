@@ -31,3 +31,4 @@ backend/public/hot
 .vscode/
 .DS_Store
 *.log
+dump.rdb
