@@ -11,7 +11,7 @@ Source de vérité : `backend/app/Domain/Payments/Enums/TransferStatus.php` (tra
 | `INITIATED` | Envoi initié | non débités |
 | `QUOTE_PENDING` | Devis en cours | non débités |
 | `QUOTE_CONFIRMED` | Devis confirmé | non débités |
-| `PAYMENT_PENDING` | En attente de validation Mobile Money | débit demandé, non confirmé |
+| `PAYMENT_PENDING` | En attente de votre paiement (Mobile Money ou carte) | débit demandé, non confirmé |
 | `PAYMENT_CONFIRMED` | Paiement Mobile Money confirmé | **débités, en transit** |
 | `TRANSFER_PENDING` | Transfert en cours auprès du réseau | en transit |
 | `TRANSFER_CONFIRMED` | Transfert confirmé par le réseau | en transit |

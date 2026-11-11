@@ -41,6 +41,7 @@ Base : `/api/v1` (clients) et `/api/admin/v1` (back-office : personnel, MFA obli
 | POST | `/transfers/{id}/refresh` | Relire le statut auprès des prestataires | — |
 | GET | `/transfers/{id}/receipt` | Reçus (transfert livré, remboursement) | — |
 | GET/POST/PUT/DELETE | `/beneficiaries` | Bénéficiaires | — |
+| GET / POST | `/simulator/card-payments/{reference}` | Démonstration : page de paiement par carte simulée (aucune donnée de carte) | — |
 | POST | `/incoming/simulate` | Démonstration : crée un transfert entrant fictif (mock uniquement) | — |
 | POST | `/incoming/lookup` | Réception : vérifier une référence auprès du réseau | — |
 | POST | `/incoming` | Réception : demander le versement sur MTN / Airtel (PIN Cashop) | **Oui** |

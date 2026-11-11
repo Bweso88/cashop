@@ -9,7 +9,7 @@ final readonly class CreateTransferInput
     public function __construct(
         public string $quoteId,
         public string $beneficiaryId,
-        public string $fundingMsisdn,
+        public ?string $fundingMsisdn,
         public string $pin,
         public ?string $purpose = null,
         public ?string $note = null,

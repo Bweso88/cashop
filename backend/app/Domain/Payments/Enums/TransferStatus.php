@@ -89,7 +89,7 @@ enum TransferStatus: string
             self::Initiated => 'Créé',
             self::QuotePending => 'Devis en cours',
             self::QuoteConfirmed => 'Devis accepté',
-            self::PaymentPending => 'En attente de votre validation Mobile Money',
+            self::PaymentPending => 'En attente de votre paiement',
             self::PaymentConfirmed => 'Paiement confirmé',
             self::TransferPending => 'Transfert en cours auprès du réseau',
             self::TransferConfirmed => 'Transfert confirmé par le réseau',

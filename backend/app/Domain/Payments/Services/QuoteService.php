@@ -38,7 +38,8 @@ class QuoteService
     public function create(User $user, string $networkCode, string $fundingCode, string $destinationCountry, PayoutMethod $payoutMethod, int $sendAmount): TransferQuote
     {
         $network = $this->enabledProvider($networkCode, ProviderKind::Remittance);
-        $funding = $this->enabledProvider($fundingCode, ProviderKind::Wallet);
+        $funding = Provider::query()->where('code', $fundingCode)->whereIn('kind', [ProviderKind::Wallet->value, ProviderKind::Card->value])->where('is_enabled', true)->first()
+            ?? throw new ApiException('PROVIDER_UNAVAILABLE', 'Ce moyen de paiement n’est pas disponible.', 422);
         if ($network->mode !== $funding->mode) {
             throw new ApiException('ENVIRONMENT_MISMATCH', 'Le portefeuille et le réseau ne sont pas configurés dans le même environnement.', 422);
         }
@@ -100,7 +101,7 @@ class QuoteService
             'fee_breakdown' => $breakdown,
             'total_fees' => $totalFees,
             'total_debit' => $sendAmount + $totalFees,
-            'payment_method' => PaymentMethod::MobileMoney,
+            'payment_method' => $funding->kind === ProviderKind::Card ? PaymentMethod::Card : PaymentMethod::MobileMoney,
             'payout_method' => $payoutMethod,
             'destination_country' => $destinationCountry,
             'provider_quote_reference' => $providerQuote->providerQuoteReference,

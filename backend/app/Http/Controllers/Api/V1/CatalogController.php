@@ -29,11 +29,17 @@ class CatalogController extends Controller
 
     public function fundingProviders(): JsonResponse
     {
-        $providers = Provider::query()->where('kind', ProviderKind::Wallet)->where('is_enabled', true)
+        $providers = Provider::query()->whereIn('kind', [ProviderKind::Wallet->value, ProviderKind::Card->value])->where('is_enabled', true)
             ->whereHas('countryConfigs', fn ($q) => $q->where('country_code', QuoteService::ORIGIN_COUNTRY)->where('is_enabled', true))
             ->orderBy('name')->get();
 
-        return response()->json(['data' => $providers->map(fn (Provider $p) => $this->provider($p))]);
+        // Mobile Money d'abord, puis la carte.
+        $providers = $providers->sortBy(fn (Provider $p) => [$p->kind === ProviderKind::Card ? 1 : 0, $p->name])->values();
+
+        return response()->json(['data' => $providers->map(fn (Provider $p) => [
+            ...$this->provider($p),
+            'type' => $p->kind === ProviderKind::Card ? 'card' : 'mobile_money',
+        ])]);
     }
 
     public function networks(): JsonResponse

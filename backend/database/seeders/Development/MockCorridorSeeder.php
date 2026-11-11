@@ -48,8 +48,8 @@ class MockCorridorSeeder extends Seeder
         $now = now();
         $providers = DB::table('providers')->pluck('id', 'code');
 
-        // Simulation activée pour les portefeuilles et les réseaux ; Visa reste désactivé (phase ultérieure).
-        DB::table('providers')->whereIn('code', ['mtn_momo', 'airtel_money', 'western_union', 'moneygram', 'ria'])
+        // Simulation activée pour les portefeuilles, la carte Visa (paiement d'un envoi) et les réseaux.
+        DB::table('providers')->whereIn('code', ['mtn_momo', 'airtel_money', 'visa_direct', 'western_union', 'moneygram', 'ria'])
             ->update(['mode' => ProviderMode::Mock->value, 'is_enabled' => true]);
         DB::table('countries')->where('code', self::ORIGIN)->update(['is_send_enabled' => true, 'is_receive_enabled' => true]);
 
@@ -75,6 +75,13 @@ class MockCorridorSeeder extends Seeder
                 'provider_id' => $providers[$wallet], 'currency_code' => 'XAF', 'is_enabled' => true, 'created_at' => $now, 'updated_at' => $now,
             ]);
         }
+
+        // Paiement d'un envoi par carte Visa (page de paiement du prestataire, simulée).
+        $config('visa_direct', self::ORIGIN, 'XAF', ProviderDirection::Send);
+        DB::table('country_payment_methods')->insertOrIgnore([
+            'id' => (string) Str::uuid7(), 'country_code' => self::ORIGIN, 'method' => PaymentMethod::Card->value,
+            'provider_id' => $providers['visa_direct'], 'currency_code' => 'XAF', 'is_enabled' => true, 'created_at' => $now, 'updated_at' => $now,
+        ]);
 
         foreach (self::CORRIDORS as $network => $destinations) {
             $config($network, self::ORIGIN, 'XAF', ProviderDirection::Send);

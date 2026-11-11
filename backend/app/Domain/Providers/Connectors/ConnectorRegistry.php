@@ -5,6 +5,7 @@ namespace App\Domain\Providers\Connectors;
 use App\Domain\Providers\Connectors\Contracts\RemittanceConnector;
 use App\Domain\Providers\Connectors\Contracts\WalletConnector;
 use App\Domain\Providers\Connectors\Exceptions\ConnectorUnavailableException;
+use App\Domain\Providers\Connectors\Simulated\SimulatedCardConnector;
 use App\Domain\Providers\Connectors\Simulated\SimulatedRemittanceConnector;
 use App\Domain\Providers\Connectors\Simulated\SimulatedWalletConnector;
 use App\Domain\Providers\Connectors\Simulated\SimulationStore;
@@ -32,6 +33,14 @@ class ConnectorRegistry
         return $this->resolve($code, $environment, ProviderKind::Wallet);
     }
 
+    /** Moyen de paiement d'un envoi : portefeuille Mobile Money ou carte. */
+    public function funding(string $code, ProviderMode $environment): WalletConnector
+    {
+        $kind = Provider::byCode($code)->kind === ProviderKind::Card ? ProviderKind::Card : ProviderKind::Wallet;
+
+        return $this->resolve($code, $environment, $kind);
+    }
+
     public function remittance(string $code, ProviderMode $environment): RemittanceConnector
     {
         return $this->resolve($code, $environment, ProviderKind::Remittance);
@@ -53,9 +62,11 @@ class ConnectorRegistry
             $delay = (int) config('cashop.simulation.delay_seconds');
             $secret = (string) config('cashop.simulation.webhook_secret');
 
-            return $kind === ProviderKind::Wallet
-                ? new SimulatedWalletConnector($code, $this->store, $delay, $secret)
-                : new SimulatedRemittanceConnector($code, $this->store, $delay, $secret);
+            return match ($kind) {
+                ProviderKind::Wallet => new SimulatedWalletConnector($code, $this->store, $delay, $secret),
+                ProviderKind::Card => new SimulatedCardConnector($code, $this->store, $delay, $secret),
+                default => new SimulatedRemittanceConnector($code, $this->store, $delay, $secret),
+            };
         }
 
         if ($environment === ProviderMode::Production && ! config('cashop.environments.production_enabled')) {

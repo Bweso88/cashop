@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\BeneficiaryController;
+use App\Http\Controllers\Api\V1\CardPaymentSimulatorController;
 use App\Http\Controllers\Api\V1\CatalogController;
 use App\Http\Controllers\Api\V1\IncomingTransferController;
 use App\Http\Controllers\Api\V1\ProfileController;
@@ -45,6 +46,10 @@ Route::prefix('v1')->group(function () {
         Route::get('transfers/{id}', [TransferController::class, 'show']);
         Route::post('transfers/{id}/refresh', [TransferController::class, 'refresh']);
         Route::get('transfers/{id}/receipt', [TransferController::class, 'receipt']);
+
+        // Démonstration : page de paiement par carte du prestataire (simulée).
+        Route::get('simulator/card-payments/{reference}', [CardPaymentSimulatorController::class, 'show']);
+        Route::post('simulator/card-payments/{reference}', [CardPaymentSimulatorController::class, 'complete'])->middleware('throttle:sensitive');
 
         // Réception (parcours B) : versement par le réseau sur Mobile Money.
         Route::post('incoming/simulate', [IncomingTransferController::class, 'simulate']);

@@ -44,7 +44,7 @@ class TransferController extends Controller
         $transfer = $orchestrator->create($request->user(), new CreateTransferInput(
             quoteId: $data['quote_id'],
             beneficiaryId: $data['beneficiary_id'],
-            fundingMsisdn: $data['funding_msisdn'],
+            fundingMsisdn: $data['funding_msisdn'] ?? null,
             pin: $data['pin'],
             purpose: $data['purpose'] ?? null,
             note: $data['note'] ?? null,

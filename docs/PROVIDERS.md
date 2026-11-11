@@ -45,6 +45,11 @@ Cette matrice est reproduite en base (`provider_capabilities.confirmation_status
 
 ---
 
+## Visa Direct — paiement par carte
+
+Usage retenu : payer un envoi avec sa carte Visa (simulation en place, API NOT CONFIRMED) :
+[providers/VISA-DIRECT.md](providers/VISA-DIRECT.md).
+
 ## Visa Pay (Pismo)
 
 Page d'authentification sandbox reçue le 2026-11-11 : jeton `POST …/passport/v2/s2s/access-token`

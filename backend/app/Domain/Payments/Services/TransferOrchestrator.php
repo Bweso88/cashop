@@ -50,6 +50,9 @@ use Illuminate\Support\Facades\Log;
  */
 class TransferOrchestrator
 {
+    /** Valeur stockée tant qu'un paiement par carte n'est pas conclu (Cashop ignore le numéro). */
+    public const CARD_PLACEHOLDER = 'Carte Visa';
+
     public function __construct(
         private readonly ConnectorRegistry $connectors,
         private readonly TransferStateMachine $states,
@@ -110,8 +113,9 @@ class TransferOrchestrator
                 'beneficiary_id' => $beneficiary->id,
                 'provider_id' => $quote->provider_id,
                 'funding_provider_id' => $quote->funding_provider_id,
-                'funding_account' => $input->fundingMsisdn,
-                'funding_account_hash' => hash_hmac('sha256', $input->fundingMsisdn, (string) config('app.key')),
+                // Carte : aucun numéro connu de Cashop ; les 4 derniers chiffres arrivent après paiement.
+                'funding_account' => $input->fundingMsisdn ?? self::CARD_PLACEHOLDER,
+                'funding_account_hash' => hash_hmac('sha256', $input->fundingMsisdn ?? 'card:'.$idempotencyKey, (string) config('app.key')),
                 'environment' => $quote->environment,
                 'status' => TransferStatus::Initiated,
                 'send_amount' => $quote->send_amount,
@@ -139,7 +143,7 @@ class TransferOrchestrator
                 'provider_id' => $quote->funding_provider_id,
                 'direction' => PaymentDirection::Collection,
                 'environment' => $quote->environment,
-                'account' => $input->fundingMsisdn,
+                'account' => $input->fundingMsisdn ?? self::CARD_PLACEHOLDER,
                 'account_hash' => $transfer->funding_account_hash,
                 'amount' => $quote->total_debit,
                 'currency' => $quote->send_currency,
@@ -254,9 +258,12 @@ class TransferOrchestrator
         DB::transaction(function () use ($transfer, $attempt, $result) {
             $attempt->update(['status' => PaymentAttemptStatus::Confirmed, 'provider_reference' => $result->providerReference, 'confirmed_at' => now()]);
             $transfer->payment_confirmed_at = now();
+            if (isset($result->raw['card_masked'])) {
+                $transfer->funding_account = 'Carte '.$result->raw['card_masked'];
+            }
             $wallet = $transfer->fundingProvider->code;
             $this->ledger->post(LedgerTransactionType::TransferReserve, "payment:{$attempt->id}", $transfer->send_currency, 'transfer', $transfer->id,
-                "Paiement Mobile Money confirmé {$transfer->external_reference}", [
+                "Paiement confirmé {$transfer->external_reference}", [
                     ["collection_clearing:{$wallet}:{$transfer->send_currency}", EntryDirection::Debit, $transfer->total_debit],
                     ["in_flight:{$transfer->send_currency}", EntryDirection::Credit, $transfer->total_debit],
                 ]);
@@ -493,7 +500,7 @@ class TransferOrchestrator
     {
         $transfer->loadMissing('fundingProvider');
 
-        return $this->connectors->wallet($transfer->fundingProvider->code, $transfer->environment);
+        return $this->connectors->funding($transfer->fundingProvider->code, $transfer->environment);
     }
 
     public function remittance(string $code, ProviderMode $environment): RemittanceConnector

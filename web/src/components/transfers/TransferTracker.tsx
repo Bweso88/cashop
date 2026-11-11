@@ -2,8 +2,8 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
-import { Loader2, RefreshCw, Smartphone } from "lucide-react";
-import { Button } from "@/components/ui/Button";
+import { CreditCard, Loader2, RefreshCw, Smartphone } from "lucide-react";
+import { Button, ButtonLink } from "@/components/ui/Button";
 import { refreshTransferAction } from "@/lib/transfer-actions";
 import type { TransferStatus } from "@/lib/transfers";
 
@@ -16,7 +16,7 @@ const MAX_POLLS = 24; // 2 minutes, puis bouton manuel
  * Relit le statut chez les prestataires (POST /refresh) puis recharge la page serveur.
  * Le minuteur ne fait que déclencher l'appel : aucun état n'est modifié dans l'effet.
  */
-export function TransferTracker({ id, status }: { id: string; status: TransferStatus }) {
+export function TransferTracker({ id, status, cardPaymentUrl }: { id: string; status: TransferStatus; cardPaymentUrl?: string | null }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [polls, setPolls] = useState(0);
@@ -43,7 +43,14 @@ export function TransferTracker({ id, status }: { id: string; status: TransferSt
 
   return (
     <div className="space-y-3">
-      {status === "PAYMENT_PENDING" && (
+      {status === "PAYMENT_PENDING" && cardPaymentUrl && (
+        <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-info/30 bg-info/10 p-4 text-sm">
+          <CreditCard className="h-5 w-5 shrink-0 text-info" />
+          <p className="flex-1">Paiement par carte en attente.</p>
+          <ButtonLink href={cardPaymentUrl}>Payer par carte</ButtonLink>
+        </div>
+      )}
+      {status === "PAYMENT_PENDING" && !cardPaymentUrl && (
         <div className="flex gap-3 rounded-2xl border border-info/30 bg-info/10 p-4 text-sm">
           <Smartphone className="h-5 w-5 shrink-0 text-info" />
           <p>Validez le paiement sur votre téléphone, auprès de votre opérateur, dans les 5 minutes. Cashop ne vous demandera jamais votre code Mobile Money.</p>

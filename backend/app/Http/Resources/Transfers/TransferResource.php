@@ -4,6 +4,7 @@ namespace App\Http\Resources\Transfers;
 
 use App\Domain\Payments\Models\Transfer;
 use App\Domain\Payments\Services\ReceiptService;
+use App\Domain\Providers\Enums\ProviderKind;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -18,6 +19,7 @@ class TransferResource extends JsonResource
             ? $this->paymentAttempts->firstWhere('direction.value', 'COLLECTION')
             : null;
         $msisdn = $this->funding_account;
+        $card = $this->fundingProvider->kind === ProviderKind::Card;
 
         return [
             'id' => $this->id,
@@ -32,7 +34,12 @@ class TransferResource extends JsonResource
             'network' => ['code' => $this->provider->code, 'name' => $this->provider->name],
             'funding' => [
                 'provider' => ['code' => $this->fundingProvider->code, 'name' => $this->fundingProvider->name],
-                'msisdn_masked' => substr($msisdn, 0, 4).' ••• '.substr($msisdn, -3),
+                'type' => $card ? 'card' : 'mobile_money',
+                // Carte : libellé renvoyé par le prestataire (« Carte •••• 4242 »), jamais le numéro.
+                'msisdn_masked' => $card ? $msisdn : substr($msisdn, 0, 4).' ••• '.substr($msisdn, -3),
+                // Page de paiement à ouvrir tant que le client n'a pas payé par carte.
+                'action_url' => $card && $collection?->status->value === 'PENDING' && $this->status->value === 'PAYMENT_PENDING' && $this->isSimulated()
+                    ? "/paiement-carte/{$collection->id}" : null,
                 'payment_status' => $collection?->status->value,
                 'payment_reference' => $collection?->provider_reference,
             ],

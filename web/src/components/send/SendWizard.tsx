@@ -56,8 +56,10 @@ export function SendWizard({ funding, networks, beneficiaries: initialBeneficiar
   const effectiveMethod = methods.includes(method) ? method : methods[0];
   const amount = /^\d+$/.test(amountInput.replace(/\s/g, "")) ? Number(amountInput.replace(/\s/g, "")) : null;
   const amountError = amount === null ? "Montant invalide (francs CFA, sans décimales)" : amount < MIN_AMOUNT ? `Minimum ${formatMoney(MIN_AMOUNT, "XAF")}` : undefined;
-  const msisdnError = /^\+242\d{9}$/.test(msisdn.replace(/\s/g, "")) ? undefined : "Numéro congolais attendu : +242 suivi de 9 chiffres";
-  const fundingName = funding.find((f) => f.code === fundingCode)?.name ?? "";
+  const selectedFunding = funding.find((f) => f.code === fundingCode);
+  const byCard = selectedFunding?.type === "card";
+  const msisdnError = byCard || /^\+242\d{9}$/.test(msisdn.replace(/\s/g, "")) ? undefined : "Numéro congolais attendu : +242 suivi de 9 chiffres";
+  const fundingName = selectedFunding?.name ?? "";
 
   function compare() {
     if (!effectiveMethod || amount === null) return;
@@ -97,12 +99,13 @@ export function SendWizard({ funding, networks, beneficiaries: initialBeneficiar
         idempotency_key: idempotencyKey,
         quote_id: quote.id,
         beneficiary_id: beneficiary.id,
-        funding_msisdn: msisdn.replace(/\s/g, ""),
+        funding_msisdn: byCard ? undefined : msisdn.replace(/\s/g, ""),
         pin,
         simulation_scenario: scenario || undefined,
       });
       if (res.ok) {
-        router.push(`/transactions/${res.data.id}`);
+        // Carte : direction la page de paiement sécurisée du prestataire (simulée en démonstration).
+        router.push(res.data.funding.action_url ?? `/transactions/${res.data.id}`);
         return;
       }
       setPin("");
@@ -163,17 +166,26 @@ export function SendWizard({ funding, networks, beneficiaries: initialBeneficiar
             <div>
               <p className="mb-2 text-sm font-medium text-muted">Payer avec</p>
               <div className="grid gap-3 sm:grid-cols-2">
-                {funding.map((f) => (
-                  <button key={f.code} type="button" onClick={() => setFundingCode(f.code)} className={cn("flex items-center gap-3 rounded-xl border p-4 text-left text-sm transition", fundingCode === f.code ? "border-brand bg-brand/10" : "border-line bg-surface-2 hover:border-faint")}>
-                    <Smartphone className={cn("h-5 w-5", fundingCode === f.code ? "text-brand" : "text-muted")} />
-                    {f.name}
-                  </button>
-                ))}
+                {funding.map((f) => {
+                  const Icon = f.type === "card" ? CreditCard : Smartphone;
+                  return (
+                    <button key={f.code} type="button" onClick={() => setFundingCode(f.code)} className={cn("flex items-center gap-3 rounded-xl border p-4 text-left text-sm transition", fundingCode === f.code ? "border-brand bg-brand/10" : "border-line bg-surface-2 hover:border-faint")}>
+                      <Icon className={cn("h-5 w-5", fundingCode === f.code ? "text-brand" : "text-muted")} />
+                      {f.type === "card" ? "Carte Visa" : f.name}
+                    </button>
+                  );
+                })}
               </div>
             </div>
-            <Field label={`Numéro ${fundingName} à débiter`} error={msisdn ? msisdnError : undefined} hint="Vous validerez le paiement sur ce téléphone.">
-              <Input value={msisdn} onChange={(e) => setMsisdn(e.target.value)} inputMode="tel" autoComplete="tel" placeholder="+242 06 000 0000" />
-            </Field>
+            {byCard ? (
+              <p className="rounded-xl border border-line bg-surface-2 px-4 py-3 text-sm text-muted">
+                Vous saisirez votre carte sur la page sécurisée du prestataire de paiement. Cashop ne voit jamais votre numéro de carte ni votre cryptogramme.
+              </p>
+            ) : (
+              <Field label={`Numéro ${fundingName} à débiter`} error={msisdn ? msisdnError : undefined} hint="Vous validerez le paiement sur ce téléphone.">
+                <Input value={msisdn} onChange={(e) => setMsisdn(e.target.value)} inputMode="tel" autoComplete="tel" placeholder="+242 06 000 0000" />
+              </Field>
+            )}
             <FormError message={error} />
             <Button className="w-full" disabled={!!amountError || !!msisdnError || !effectiveMethod || pending} onClick={compare}>
               {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : null} Comparer les réseaux
@@ -229,7 +241,7 @@ export function SendWizard({ funding, networks, beneficiaries: initialBeneficiar
               {[
                 ["Bénéficiaire", `${beneficiary.first_name} ${beneficiary.last_name}${beneficiary.city ? ` · ${beneficiary.city}` : ""}`],
                 ["Réseau", `${quote.network.name} · ${PAYOUT_LABELS[quote.payout_method]}`],
-                ["Paiement", `${quote.funding_provider.name} · ${msisdn}`],
+                ["Paiement", byCard ? "Carte Visa (page sécurisée du prestataire)" : `${quote.funding_provider.name} · ${msisdn}`],
                 ["Montant envoyé", formatMoney(quote.send.amount, quote.send.currency)],
                 ...quote.fees.map((f) => [f.label, formatMoney(f.amount, quote.send.currency)]),
                 ["Taux appliqué", `1 XAF = ${Number(quote.fx_rate).toLocaleString("fr-FR", { maximumSignificantDigits: 8 })} ${quote.receive.currency}`],
@@ -266,7 +278,7 @@ export function SendWizard({ funding, networks, beneficiaries: initialBeneficiar
             </Field>
             <FormError message={error} />
             <Button className="w-full" disabled={pin.length !== 6 || pending} onClick={confirm}>
-              {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : null} Payer {formatMoney(quote.total_debit.amount, quote.total_debit.currency)} avec {quote.funding_provider.name}
+              {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : null} Payer {formatMoney(quote.total_debit.amount, quote.total_debit.currency)} {byCard ? "par carte" : `avec ${quote.funding_provider.name}`}
             </Button>
           </div>
         )}
@@ -277,9 +289,9 @@ export function SendWizard({ funding, networks, beneficiaries: initialBeneficiar
           <p className="mb-2 font-medium text-text">Comment ça marche</p>
           <ol className="list-decimal space-y-1.5 pl-4">
             <li>Vous confirmez avec votre PIN Cashop.</li>
-            <li>{fundingName || "Votre opérateur"} vous demande de valider le paiement sur votre téléphone (5 minutes).</li>
+            <li>{byCard ? "Vous payez par carte sur la page sécurisée du prestataire (3-D Secure)." : `${fundingName || "Votre opérateur"} vous demande de valider le paiement sur votre téléphone (5 minutes).`}</li>
             <li>Une fois le paiement confirmé, Cashop transmet le transfert au réseau choisi.</li>
-            <li>Si le réseau refuse, vous êtes remboursé intégralement, frais compris.</li>
+            <li>Si le réseau refuse, vous êtes remboursé intégralement, frais compris{byCard ? ", sur votre carte" : ""}.</li>
           </ol>
         </Card>
         <Card className="text-sm text-muted">

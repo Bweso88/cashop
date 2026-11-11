@@ -10,7 +10,7 @@ export type Money = { amount: number; currency: Currency };
 export type PayoutMethod = "cash_pickup" | "mobile_money" | "bank_account" | "card";
 export type Named = { code: string; name: string };
 
-export type FundingProvider = Named & { environment: string; is_simulation: boolean };
+export type FundingProvider = Named & { environment: string; is_simulation: boolean; type: "mobile_money" | "card" };
 export type Network = Named & {
   environment: string;
   is_simulation: boolean;
@@ -66,7 +66,14 @@ export type Transfer = {
   simulation_notice: string | null;
   simulation_scenario: string | null;
   network: Named;
-  funding: { provider: Named; msisdn_masked: string; payment_status: "PENDING" | "CONFIRMED" | "FAILED" | "UNKNOWN" | null; payment_reference: string | null };
+  funding: {
+    provider: Named;
+    type: "mobile_money" | "card";
+    msisdn_masked: string;
+    payment_status: "PENDING" | "CONFIRMED" | "FAILED" | "UNKNOWN" | null;
+    payment_reference: string | null;
+    action_url: string | null;
+  };
   beneficiary: { id: string; name: string; country: string };
   send: Money;
   total_fees: Money;
@@ -185,4 +192,20 @@ export async function getIncomingTransfers(): Promise<IncomingTransfer[]> {
 
 export async function getIncomingTransfer(id: string): Promise<IncomingTransfer> {
   return api<IncomingTransfer>(`/incoming/${encodeURIComponent(id)}`);
+}
+
+// ─── Paiement par carte (page du prestataire, simulée en démonstration) ───────
+
+export type CardPaymentSession = {
+  reference: string;
+  transfer_id: string;
+  merchant: string;
+  amount: Money;
+  status: "AWAITING_CUSTOMER" | "APPROVED" | "DECLINED" | "AUTHENTICATION_FAILED" | "UNKNOWN";
+  is_simulation: boolean;
+  simulation_notice: string;
+};
+
+export async function getCardPaymentSession(reference: string): Promise<CardPaymentSession> {
+  return api<CardPaymentSession>(`/simulator/card-payments/${encodeURIComponent(reference)}`);
 }

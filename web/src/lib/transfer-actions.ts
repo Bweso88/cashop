@@ -64,7 +64,7 @@ export async function createTransferAction(input: {
   idempotency_key: string;
   quote_id: string;
   beneficiary_id: string;
-  funding_msisdn: string;
+  funding_msisdn?: string;
   pin: string;
   simulation_scenario?: string;
 }): Promise<ActionResult<Transfer>> {
@@ -131,6 +131,15 @@ export async function claimIncomingAction(input: {
 export async function refreshIncomingAction(id: string): Promise<ActionResult<IncomingTransfer>> {
   try {
     return { ok: true, data: await api<IncomingTransfer>(`/incoming/${encodeURIComponent(id)}/refresh`, { method: "POST" }) };
+  } catch (error) {
+    return failure(error);
+  }
+}
+
+/** DÉMONSTRATION : résultat choisi sur la page de paiement par carte simulée. */
+export async function completeCardPaymentAction(reference: string, outcome: "APPROVED" | "DECLINED" | "AUTHENTICATION_FAILED"): Promise<ActionResult<{ transfer_id: string; status: string }>> {
+  try {
+    return { ok: true, data: await api(`/simulator/card-payments/${encodeURIComponent(reference)}`, { method: "POST", body: { outcome } }) };
   } catch (error) {
     return failure(error);
   }

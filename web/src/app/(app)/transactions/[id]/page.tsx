@@ -101,7 +101,7 @@ async function TransferDetail({ params }: { params: Promise<{ id: string }> }) {
         <Headline t={t} />
 
         <Outcome t={t} />
-        {!t.is_terminal && !t.is_delivered && <TransferTracker id={t.id} status={t.status} />}
+        {!t.is_terminal && !t.is_delivered && <TransferTracker id={t.id} status={t.status} cardPaymentUrl={t.funding.action_url} />}
         {(t.receipts?.length ?? 0) > 0 && (
           <ButtonLink href={`/transactions/${t.id}/recu`} variant="ghost"><FileText className="h-4 w-4" /> Voir le reçu</ButtonLink>
         )}
