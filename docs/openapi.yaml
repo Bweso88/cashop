@@ -747,6 +747,7 @@ components:
         channel: { type: string, enum: [sms, email, totp] }
         destination_hint: { type: string, examples: ['+237 6•• ••• •42'] }
         expires_at: { type: string, format: date-time }
+        demo_code: { type: string, description: "Démonstration uniquement (aucun SMS réel, OTP_DEMO_DISPLAY=true) ; jamais en production." }
     AuthToken:
       type: object
       properties:

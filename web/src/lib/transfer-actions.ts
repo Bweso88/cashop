@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { api, ApiError } from "./api/client";
-import type { Beneficiary, PayoutMethod, Quote, Transfer } from "./transfers";
+import type { Beneficiary, IncomingLookup, IncomingTransfer, PayoutMethod, Quote, Transfer } from "./transfers";
 
 export type ActionResult<T> = { ok: true; data: T } | { ok: false; error: string; code?: string; fieldErrors?: Record<string, string> };
 
@@ -86,6 +86,51 @@ export async function createTransferAction(input: {
 export async function refreshTransferAction(id: string): Promise<ActionResult<Transfer>> {
   try {
     return { ok: true, data: await api<Transfer>(`/transfers/${encodeURIComponent(id)}/refresh`, { method: "POST" }) };
+  } catch (error) {
+    return failure(error);
+  }
+}
+
+// ─── Réception ───────────────────────────────────────────────────────────────
+
+/** DÉMONSTRATION : un proche à l'étranger vous envoie un transfert (simulation uniquement). */
+export async function simulateIncomingAction(input: { network: string; amount: number; scenario?: string }): Promise<ActionResult<{ reference: string; network: { code: string; name: string } }>> {
+  try {
+    return { ok: true, data: await api("/incoming/simulate", { method: "POST", body: input }) };
+  } catch (error) {
+    return failure(error);
+  }
+}
+
+export async function lookupIncomingAction(input: { network: string; reference: string }): Promise<ActionResult<IncomingLookup>> {
+  try {
+    return { ok: true, data: await api<IncomingLookup>("/incoming/lookup", { method: "POST", body: input }) };
+  } catch (error) {
+    return failure(error);
+  }
+}
+
+export async function claimIncomingAction(input: {
+  idempotency_key: string;
+  network: string;
+  reference: string;
+  payout_provider: string;
+  payout_msisdn: string;
+  pin: string;
+}): Promise<ActionResult<IncomingTransfer>> {
+  const { idempotency_key, ...body } = input;
+  try {
+    const transfer = await api<IncomingTransfer>("/incoming", { method: "POST", body, headers: { "Idempotency-Key": idempotency_key } });
+    revalidatePath("/recevoir");
+    return { ok: true, data: transfer };
+  } catch (error) {
+    return failure(error);
+  }
+}
+
+export async function refreshIncomingAction(id: string): Promise<ActionResult<IncomingTransfer>> {
+  try {
+    return { ok: true, data: await api<IncomingTransfer>(`/incoming/${encodeURIComponent(id)}/refresh`, { method: "POST" }) };
   } catch (error) {
     return failure(error);
   }

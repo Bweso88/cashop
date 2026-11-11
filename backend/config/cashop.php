@@ -24,6 +24,9 @@ return [
         'max_attempts' => (int) env('OTP_MAX_ATTEMPTS', 5),
         // Envois maximum par destination et par heure.
         'max_sends_per_hour' => (int) env('OTP_MAX_SENDS_PER_HOUR', 5),
+        // DÉMONSTRATION : renvoie le code à l'écran quand aucun SMS réel n'est envoyé (fournisseur
+        // « log »). Ignoré en production quoi qu'il arrive.
+        'demo_display' => filter_var(env('OTP_DEMO_DISPLAY', false), FILTER_VALIDATE_BOOL),
     ],
 
     'totp' => [

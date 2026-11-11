@@ -24,7 +24,7 @@ class StartLogin
     public function __construct(private readonly OtpService $otp, private readonly AuditLogger $audit) {}
 
     /**
-     * @return array{challenge_id: string, channel: string, destination_hint: string|null, expires_at: string}
+     * @return array{challenge_id: string, channel: string, destination_hint: string|null, expires_at: string, demo_code?: string}
      */
     public function __invoke(string $login, string $password, DeviceContext $device): array
     {
@@ -63,6 +63,7 @@ class StartLogin
             'channel' => $channel->value,
             'destination_hint' => $issued['destination_hint'],
             'expires_at' => $issued['challenge']->expires_at->toIso8601String(),
+            ...($issued['demo_code'] ? ['demo_code' => $issued['demo_code']] : []),
         ];
     }
 

@@ -3,15 +3,18 @@
 namespace App\Domain\Providers\Connectors\Simulated;
 
 use App\Domain\Payments\Enums\PayoutMethod;
+use App\Domain\Providers\Connectors\Contracts\IncomingTransferConnector;
 use App\Domain\Providers\Connectors\Contracts\RemittanceConnector;
 use App\Domain\Providers\Connectors\DTO\ConnectorResult;
 use App\Domain\Providers\Connectors\DTO\FieldSpec;
+use App\Domain\Providers\Connectors\DTO\IncomingTransfer;
 use App\Domain\Providers\Connectors\DTO\RemittanceOrder;
 use App\Domain\Providers\Connectors\DTO\RemittanceQuote;
 use App\Domain\Providers\Connectors\DTO\RemittanceQuoteRequest;
 use App\Domain\Providers\Connectors\Exceptions\ConnectorException;
 use App\Domain\Providers\Enums\ConnectorCapability;
 use App\Domain\Providers\Enums\ConnectorStatus;
+use App\Domain\Providers\Enums\IncomingScenario;
 use App\Domain\Providers\Enums\SimulationScenario;
 use Illuminate\Support\Str;
 
@@ -21,7 +24,7 @@ use Illuminate\Support\Str;
  * Frais FICTIFS, références « SIM-… » sans valeur auprès des réseaux réels, et mention
  * « simulation — aucun fonds réel versé » sur tout ce qui est présenté au client.
  */
-class SimulatedRemittanceConnector extends SimulatedConnector implements RemittanceConnector
+class SimulatedRemittanceConnector extends SimulatedConnector implements IncomingTransferConnector, RemittanceConnector
 {
     /** Grille FICTIVE : [points de base, minimum en XAF]. Aucun lien avec les tarifs réels. */
     private const FICTITIOUS_FEES = [
@@ -139,5 +142,90 @@ class SimulatedRemittanceConnector extends SimulatedConnector implements Remitta
         $this->store->put($this->code, $reference, $record);
 
         return new ConnectorResult(ConnectorStatus::Cancelled, $record['provider_reference']);
+    }
+
+    // ─── Réception (transferts entrants simulés) ─────────────────────────────
+
+    /**
+     * DÉMONSTRATION : « un proche à l'étranger » envoie un transfert vers le Congo. Renvoie la
+     * référence à communiquer au bénéficiaire, qui n'est valable que dans le simulateur.
+     */
+    public function simulateIncoming(string $receiverFirstName, string $receiverLastName, int $amount, string $currency, string $senderName, string $senderCountry, IncomingScenario $scenario): string
+    {
+        $reference = 'SIM-IN-'.(self::PREFIX[$this->code] ?? 'NET').'-'.Str::upper(Str::random(8));
+        $this->store->put($this->code, "incoming:{$reference}", [
+            'amount' => $amount,
+            'currency' => $currency,
+            'sender_name' => $senderName,
+            'sender_country' => $senderCountry,
+            'receiver_first_name' => $receiverFirstName,
+            'receiver_last_name' => $receiverLastName,
+            'scenario' => $scenario->value,
+            'payout' => null,
+        ]);
+
+        return $reference;
+    }
+
+    public function lookupIncoming(string $reference): IncomingTransfer
+    {
+        $record = $this->store->get($this->code, "incoming:{$reference}");
+        if (! $record) {
+            throw new ConnectorException('Aucun transfert avec cette référence (simulation).', definitive: true, failureCode: 'NOT_FOUND');
+        }
+
+        return new IncomingTransfer(
+            reference: $reference,
+            status: $record['payout'] && ($record['payout']['status'] ?? null) === 'PAID_OUT' ? 'PAID_OUT' : 'AVAILABLE',
+            amount: $record['amount'],
+            currency: $record['currency'],
+            senderName: $record['sender_name'],
+            senderCountry: $record['sender_country'],
+            receiverFirstName: $record['receiver_first_name'],
+            receiverLastName: $record['receiver_last_name'],
+            isSimulated: true,
+        );
+    }
+
+    public function requestIncomingPayout(string $reference, string $walletProvider, string $msisdn): ConnectorResult
+    {
+        $key = "incoming:{$reference}";
+        $record = $this->store->get($this->code, $key)
+            ?? throw new ConnectorException('Aucun transfert avec cette référence (simulation).', definitive: true, failureCode: 'NOT_FOUND');
+
+        // Idempotence : un second appel ne crée pas un second versement.
+        if (! $record['payout']) {
+            if ($record['scenario'] === IncomingScenario::PayoutFailed->value) {
+                throw new ConnectorException('Versement refusé par le réseau (simulation).', definitive: true, failureCode: 'PAYOUT_REJECTED');
+            }
+            $record['payout'] = [
+                'wallet' => $walletProvider,
+                'created_at' => now()->getTimestamp(),
+                'provider_reference' => $this->simulatedReference((self::PREFIX[$this->code] ?? 'NET').'-PAY'),
+                'status' => 'PENDING',
+            ];
+            $this->store->put($this->code, $key, $record);
+        }
+
+        return $this->incomingPayoutStatus($reference);
+    }
+
+    public function incomingPayoutStatus(string $reference): ConnectorResult
+    {
+        $key = "incoming:{$reference}";
+        $record = $this->store->get($this->code, $key);
+        if (! $record || ! $record['payout']) {
+            return new ConnectorResult(ConnectorStatus::Failed, failureCode: 'NOT_FOUND', failureReason: 'Aucun versement pour cette référence (simulation).');
+        }
+        $payout = $record['payout'];
+        if ($record['scenario'] === IncomingScenario::PayoutPending->value || $this->elapsed($payout) < $this->delaySeconds) {
+            return new ConnectorResult(ConnectorStatus::Pending, $payout['provider_reference']);
+        }
+        if ($payout['status'] !== 'PAID_OUT') {
+            $record['payout']['status'] = 'PAID_OUT';
+            $this->store->put($this->code, $key, $record);
+        }
+
+        return new ConnectorResult(ConnectorStatus::PaidOut, $payout['provider_reference']);
     }
 }

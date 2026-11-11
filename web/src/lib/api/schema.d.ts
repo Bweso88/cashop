@@ -552,6 +552,8 @@ export interface components {
             destination_hint?: string;
             /** Format: date-time */
             expires_at?: string;
+            /** @description Démonstration uniquement (aucun SMS réel, OTP_DEMO_DISPLAY=true) ; jamais en production. */
+            demo_code?: string;
         };
         AuthToken: {
             token?: string;

@@ -1,39 +1,71 @@
 import type { Metadata } from "next";
-import { Banknote, Search, Smartphone } from "lucide-react";
+import Link from "next/link";
+import { Suspense } from "react";
+import { ArrowDownLeft } from "lucide-react";
 import { PageHeader } from "@/components/app/PageHeader";
-import { Badge } from "@/components/ui/Badge";
+import { ReceiveFlow } from "@/components/receive/ReceiveFlow";
+import { Badge, SimulationBadge } from "@/components/ui/Badge";
 import { Card, CardHeader } from "@/components/ui/Card";
+import { dateTime } from "@/lib/labels";
+import { formatMoney } from "@/lib/money";
+import { getCurrentUser } from "@/lib/session";
+import { getCatalog, getIncomingTransfers, type IncomingStatus } from "@/lib/transfers";
 
 export const metadata: Metadata = { title: "Recevoir de l'argent" };
 
-/**
- * Parcours B (réception) : pas encore développé. Cashop ne détient pas de fonds : un transfert reçu
- * est versé par le réseau (agence ou Mobile Money), jamais sur un solde Cashop.
- */
+const TONE: Record<IncomingStatus, "brand" | "info" | "danger" | "warning"> = {
+  PAID_OUT: "brand", PAYOUT_PENDING: "info", FAILED: "danger", REQUIRES_RECONCILIATION: "warning",
+};
+
+async function Flow() {
+  const [user, catalog] = await Promise.all([getCurrentUser(), getCatalog()]);
+  return (
+    <ReceiveFlow
+      networks={catalog.networks.map(({ code, name }) => ({ code, name }))}
+      wallets={catalog.funding}
+      simulation={catalog.scenarios.length > 0}
+      defaultMsisdn={user.phone?.startsWith("+242") ? user.phone : ""}
+    />
+  );
+}
+
+async function History() {
+  const items = await getIncomingTransfers();
+  return (
+    <Card>
+      <CardHeader title="Vos réceptions" />
+      <div className="-mx-2 divide-y divide-line">
+        {items.map((t) => (
+          <Link key={t.id} href={`/recevoir/${t.id}`} className="flex items-center gap-4 rounded-xl px-2 py-3 transition hover:bg-surface-2">
+            <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-brand/15 text-brand"><ArrowDownLeft className="h-5 w-5" /></span>
+            <div className="min-w-0 flex-1">
+              <p className="truncate font-medium">{t.sender.name}</p>
+              <p className="truncate text-sm text-muted">{t.network.name} → {t.payout.provider.name} · {dateTime.format(new Date(t.created_at))}</p>
+            </div>
+            <div className="text-right">
+              <p className={t.status === "PAID_OUT" ? "font-semibold tabular-nums text-brand" : "font-semibold tabular-nums text-muted"}>
+                {t.status === "PAID_OUT" ? "+" : ""}{formatMoney(t.amount.amount, t.amount.currency)}
+              </p>
+              <Badge tone={TONE[t.status]} className="mt-1">{t.status_label}</Badge>
+            </div>
+          </Link>
+        ))}
+        {items.length === 0 && <p className="px-2 py-8 text-center text-muted">Aucune réception pour l&apos;instant.</p>}
+      </div>
+    </Card>
+  );
+}
+
 export default function ReceivePage() {
   return (
-    <div className="mx-auto max-w-4xl">
-      <PageHeader title="Recevoir de l'argent" subtitle="Un proche vous envoie de l'argent par Western Union, MoneyGram ou Ria." />
-      <div className="grid gap-6 md:grid-cols-2">
-        <Card>
-          <CardHeader title="Suivre un transfert reçu" subtitle="Avec la référence que vous a communiquée l'expéditeur" action={<Badge tone="info">Bientôt</Badge>} />
-          <div className="flex items-center gap-3 text-sm text-muted">
-            <Search className="h-5 w-5 shrink-0 text-brand" /> La consultation dépend des API de chaque réseau (documentation partenaire requise).
-          </div>
-        </Card>
-        <Card>
-          <CardHeader title="Retrait en agence" subtitle="Avec une pièce d'identité à votre nom exact" />
-          <div className="flex items-center gap-3 text-sm text-muted">
-            <Banknote className="h-5 w-5 shrink-0 text-brand" /> Présentez la référence du transfert dans une agence du réseau choisi par l&apos;expéditeur.
-          </div>
-        </Card>
-        <Card>
-          <CardHeader title="Versement sur Mobile Money" subtitle="Selon les corridors ouverts par chaque réseau" action={<Badge tone="info">Bientôt</Badge>} />
-          <div className="flex items-center gap-3 text-sm text-muted">
-            <Smartphone className="h-5 w-5 shrink-0 text-brand" /> Communiquez à l&apos;expéditeur votre numéro MTN ou Airtel avec l&apos;indicatif +242.
-          </div>
-        </Card>
-      </div>
+    <div className="mx-auto max-w-4xl space-y-6">
+      <PageHeader title="Recevoir de l'argent" subtitle="Un proche vous a envoyé de l'argent par Western Union, MoneyGram ou Ria : recevez-le sur votre Mobile Money." action={<SimulationBadge />} />
+      <Suspense fallback={<div className="h-96 animate-pulse rounded-3xl bg-surface" />}>
+        <Flow />
+      </Suspense>
+      <Suspense fallback={<div className="h-40 animate-pulse rounded-3xl bg-surface" />}>
+        <History />
+      </Suspense>
     </div>
   );
 }

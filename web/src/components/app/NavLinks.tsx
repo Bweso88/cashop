@@ -25,7 +25,7 @@ export function NavLinks({ compact = false }: { compact?: boolean }) {
 export function NavList({ compact = false, pathname = "" }: { compact?: boolean; pathname?: string }) {
   return (
     <nav className={cn(compact ? "flex justify-around" : "space-y-1")}>
-      {NAV.filter((item) => !compact || ["/accueil", "/envoyer", "/transactions", "/profil"].includes(item.href)).map(({ href, label, icon: Icon }) => {
+      {NAV.filter((item) => !compact || ["/accueil", "/envoyer", "/recevoir", "/transactions", "/profil"].includes(item.href)).map(({ href, label, icon: Icon }) => {
         const active = pathname === href || pathname.startsWith(`${href}/`);
         return (
           <Link

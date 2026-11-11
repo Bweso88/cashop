@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\BeneficiaryController;
 use App\Http\Controllers\Api\V1\CatalogController;
+use App\Http\Controllers\Api\V1\IncomingTransferController;
 use App\Http\Controllers\Api\V1\ProfileController;
 use App\Http\Controllers\Api\V1\SecurityController;
 use App\Http\Controllers\Api\V1\TransferController;
@@ -44,6 +45,14 @@ Route::prefix('v1')->group(function () {
         Route::get('transfers/{id}', [TransferController::class, 'show']);
         Route::post('transfers/{id}/refresh', [TransferController::class, 'refresh']);
         Route::get('transfers/{id}/receipt', [TransferController::class, 'receipt']);
+
+        // Réception (parcours B) : versement par le réseau sur Mobile Money.
+        Route::post('incoming/simulate', [IncomingTransferController::class, 'simulate']);
+        Route::post('incoming/lookup', [IncomingTransferController::class, 'lookup'])->middleware('throttle:sensitive');
+        Route::post('incoming', [IncomingTransferController::class, 'store'])->middleware('throttle:sensitive');
+        Route::get('incoming', [IncomingTransferController::class, 'index']);
+        Route::get('incoming/{id}', [IncomingTransferController::class, 'show']);
+        Route::post('incoming/{id}/refresh', [IncomingTransferController::class, 'refresh']);
     });
 
     // Notifications des prestataires : authentifiées par leur propre mécanisme (pas de jeton Cashop).

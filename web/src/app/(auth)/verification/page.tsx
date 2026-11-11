@@ -18,7 +18,16 @@ async function ChallengeHint() {
   const raw = (await cookies()).get(CHALLENGE_COOKIE)?.value;
   if (!raw) redirect("/connexion");
   const challenge = JSON.parse(raw) as OtpChallenge;
-  return <p className="mb-8 mt-1 text-muted">{CHANNEL_TEXT[challenge.channel ?? "sms"]?.(challenge.destination_hint)}</p>;
+  return (
+    <>
+      <p className="mb-8 mt-1 text-muted">{CHANNEL_TEXT[challenge.channel ?? "sms"]?.(challenge.destination_hint)}</p>
+      {challenge.demo_code && (
+        <p className="-mt-4 mb-8 rounded-xl border border-warning/40 bg-warning/10 px-4 py-3 text-sm text-warning">
+          Démonstration : aucun SMS n&apos;est envoyé. Votre code est <span className="font-mono text-base font-semibold tracking-widest">{challenge.demo_code}</span>
+        </p>
+      )}
+    </>
+  );
 }
 
 export default function VerificationPage() {

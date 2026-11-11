@@ -41,6 +41,11 @@ Base : `/api/v1` (clients) et `/api/admin/v1` (back-office : personnel, MFA obli
 | POST | `/transfers/{id}/refresh` | Relire le statut auprès des prestataires | — |
 | GET | `/transfers/{id}/receipt` | Reçus (transfert livré, remboursement) | — |
 | GET/POST/PUT/DELETE | `/beneficiaries` | Bénéficiaires | — |
+| POST | `/incoming/simulate` | Démonstration : crée un transfert entrant fictif (mock uniquement) | — |
+| POST | `/incoming/lookup` | Réception : vérifier une référence auprès du réseau | — |
+| POST | `/incoming` | Réception : demander le versement sur MTN / Airtel (PIN Cashop) | **Oui** |
+| GET | `/incoming` · `/incoming/{id}` | Réceptions et détail | — |
+| POST | `/incoming/{id}/refresh` | Relire le statut du versement | — |
 | POST | `/webhooks/{provider}` | Notifications providers | (anti-rejeu interne) |
 
 ## Codes d'erreur métier
@@ -64,6 +69,10 @@ Base : `/api/v1` (clients) et `/api/admin/v1` (back-office : personnel, MFA obli
 | `RECEIPT_NOT_AVAILABLE` | 409 | Ni livré ni remboursé |
 | `PROVIDER_UNAVAILABLE` | 503 | Connecteur absent ou environnement désactivé |
 | `INVALID_WEBHOOK` | 401 | Signature ou horodatage de notification invalide |
+| `INCOMING_NOT_FOUND` | 404 | Aucun transfert entrant pour cette référence |
+| `RECEIVER_MISMATCH` | 403 | Le transfert est destiné à une autre personne |
+| `ALREADY_CLAIMED` | 409 | Transfert entrant déjà réclamé ou versé |
+| `SIMULATION_ONLY` | 403 | Opération réservée à la démonstration |
 | `RISK_REVIEW` / `RISK_BLOCKED` | 403 | Décision du moteur de risque |
 | `STEP_UP_REQUIRED` | 403 | OTP supplémentaire exigé |
 | `INVALID_STATE` | 409 | Opération incompatible avec le statut |

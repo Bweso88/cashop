@@ -144,3 +144,45 @@ export async function getTransfer(id: string): Promise<Transfer> {
 export async function getReceipts(id: string): Promise<Receipt[]> {
   return (await api<{ data: Receipt[] }>(`/transfers/${encodeURIComponent(id)}/receipt`)).data;
 }
+
+// ─── Réception (parcours B) ──────────────────────────────────────────────────
+
+export type IncomingStatus = "PAYOUT_PENDING" | "PAID_OUT" | "FAILED" | "REQUIRES_RECONCILIATION";
+
+export type IncomingLookup = {
+  network: Named;
+  reference: string;
+  amount: Money;
+  sender: { name: string; country: string };
+  status: "AVAILABLE" | "PAID_OUT" | "CLAIMED";
+  incoming_transfer_id: string | null;
+  is_simulation: boolean;
+  simulation_notice: string | null;
+};
+
+export type IncomingTransfer = {
+  id: string;
+  status: IncomingStatus;
+  status_label: string;
+  is_terminal: boolean;
+  environment: string;
+  is_simulation: boolean;
+  simulation_notice: string | null;
+  network: Named;
+  network_reference: string;
+  sender: { name: string; country: string };
+  amount: Money;
+  payout: { provider: Named; msisdn_masked: string; reference: string | null };
+  failure: { code: string; message: string | null } | null;
+  paid_out_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export async function getIncomingTransfers(): Promise<IncomingTransfer[]> {
+  return (await api<{ data: IncomingTransfer[] }>("/incoming")).data;
+}
+
+export async function getIncomingTransfer(id: string): Promise<IncomingTransfer> {
+  return api<IncomingTransfer>(`/incoming/${encodeURIComponent(id)}`);
+}

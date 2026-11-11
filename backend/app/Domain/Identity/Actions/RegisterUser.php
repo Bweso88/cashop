@@ -25,7 +25,7 @@ class RegisterUser
 
     /**
      * @param  array{email: string, phone: string, password: string, first_name?: string, last_name?: string, country: string}  $data
-     * @return array{challenge_id: string, channel: string, destination_hint: string|null, expires_at: string}
+     * @return array{challenge_id: string, channel: string, destination_hint: string|null, expires_at: string, demo_code?: string}
      */
     public function __invoke(array $data, DeviceContext $device): array
     {
@@ -69,6 +69,7 @@ class RegisterUser
             'channel' => OtpChannel::Sms->value,
             'destination_hint' => $issued['destination_hint'],
             'expires_at' => $issued['challenge']->expires_at->toIso8601String(),
+            ...($issued['demo_code'] ? ['demo_code' => $issued['demo_code']] : []),
         ];
     }
 }

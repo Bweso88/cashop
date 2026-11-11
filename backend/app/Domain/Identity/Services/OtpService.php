@@ -24,7 +24,7 @@ class OtpService
     public function __construct(private readonly OtpSender $sender, private readonly Totp $totp) {}
 
     /**
-     * @return array{challenge: OtpCode, destination_hint: string|null}
+     * @return array{challenge: OtpCode, destination_hint: string|null, demo_code: string|null}
      */
     public function issue(?User $user, OtpChannel $channel, ?string $destination, OtpPurpose $purpose, array $context = []): array
     {
@@ -61,7 +61,15 @@ class OtpService
             $this->sender->send($channel, $destination, $code, $purpose);
         }
 
-        return ['challenge' => $challenge, 'destination_hint' => self::mask($channel, $destination)];
+        return ['challenge' => $challenge, 'destination_hint' => self::mask($channel, $destination), 'demo_code' => self::demoDisplay() ? $code : null];
+    }
+
+    /** Code affiché à l'écran : démonstration sans SMS réel uniquement, jamais en production. */
+    public static function demoDisplay(): bool
+    {
+        return ! app()->isProduction()
+            && config('services.sms.provider') === 'log'
+            && config('cashop.otp.demo_display') === true;
     }
 
     /**
